@@ -67,6 +67,8 @@ function eansFoto(ti, marcas = []) {
   return elegidos.slice(0, 4).map(pi => PROD[pi][0]);
 }
 const foto = (eans, clase = '') => `<span class="foto ${clase}" data-fotos="${esc(eans.join(','))}" aria-hidden="true"></span>`;
+/** Foto que abre la ficha del producto al tocarla. */
+const fotoFicha = (eans, clase = '', ctx = '') => `<button type="button" class="foto-btn" data-ficha="${esc(eans[0] || '')}" data-ctx="${esc(ctx)}" aria-label="Ver ficha del producto">${foto(eans, clase)}</button>`;
 const textoMarcas = it => !it.marcas.length ? 'Cualquier marca' : it.marcas.length === 1 ? titulo(it.marcas[0]) : `${titulo(it.marcas[0])} y ${it.marcas.length - 1} más`;
 const cercanas = () => estado.ubic ? stores.filter(s => km(estado.ubic, s) <= estado.radio) : [];
 
@@ -211,8 +213,9 @@ function initControles() {
   $('#sugerencias').onclick = e => { const c = e.target.closest('[data-ti]'); if (c) agregar({ ti: +c.dataset.ti }); };
 
   // hoja de marcas
-  $('#velo').onclick = cerrarHoja; $('#hojaListo').onclick = cerrarHoja;
-  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#hoja').hidden) cerrarHoja(); });
+  $('#velo').onclick = () => { if (!$('#ficha').hidden) cerrarFicha(); else cerrarHoja(); };
+  $('#hojaListo').onclick = cerrarHoja; $('#fichaCerrar').onclick = cerrarFicha;
+  document.addEventListener('keydown', e => { if (e.key !== 'Escape') return; if (!$('#ficha').hidden) cerrarFicha(); else if (!$('#hoja').hidden) cerrarHoja(); });
   $('#hojaFiltro').oninput = e => {
     const q = norm(e.target.value);
     $('#hojaMarcas').querySelectorAll('li[data-m]').forEach(li => li.hidden = !!q && !norm(li.dataset.m).includes(q));
@@ -239,7 +242,7 @@ function renderLista() {
   $('#sugerencias').innerHTML = estado.lista.length < 6 && populares.length
     ? `<h2>${estado.lista.length ? 'Sumá algo más' : 'Lo que más se compra'}</h2><div class="chips">${populares.map(t => `<button type="button" class="chip" data-ti="${t}">${esc(TIPOS[t])}</button>`).join('')}</div>` : '';
   $('#lista').innerHTML = estado.lista.map((it, i) => `
-    <li class="item">${foto(eansFoto(TIPO_IDX.get(it.tipo), it.marcas), 'f-item')}<span class="n">${esc(it.tipo)}</span>
+    <li class="item">${fotoFicha(eansFoto(TIPO_IDX.get(it.tipo), it.marcas), 'f-item')}<span class="n">${esc(it.tipo)}</span>
       <span class="paso"><button type="button" data-a="-" data-i="${i}" aria-label="Uno menos de ${esc(it.tipo)}">−</button><b aria-live="polite">${it.qty}</b><button type="button" data-a="+" data-i="${i}" aria-label="Uno más de ${esc(it.tipo)}">+</button></span>
       <button type="button" class="marca-btn" data-a="m" data-i="${i}" aria-haspopup="dialog"><span>${esc(textoMarcas(it))}</span>${ICONO.flecha}</button></li>`).join('');
   aplicarFotos($('#lista'));
@@ -278,7 +281,7 @@ function pintarHoja() {
   const linea = m => { const x = info.get(m); return x.sucs.size ? `Desde ${fmt(x.min)} en ${x.sucs.size} súper cerca` : 'No está en los súper cercanos'; };
   const filtro = norm($('#hojaFiltro').value);
   $('#hojaMarcas').innerHTML = `<li class="cualquiera"><label><input type="checkbox" data-m="" ${it.marcas.length ? '' : 'checked'}><span>Cualquier marca<small>Se elige la más barata en cada súper</small></span></label></li>` +
-    marcas.map(m => `<li data-m="${esc(m)}" ${filtro && !norm(m).includes(filtro) ? 'hidden' : ''}><label><input type="checkbox" data-m="${esc(m)}" ${it.marcas.includes(m) ? 'checked' : ''}>${foto(eansFoto(ti, [m]))}<span>${esc(titulo(m))}<small>${linea(m)}</small></span></label></li>`).join('');
+    marcas.map(m => `<li data-m="${esc(m)}" ${filtro && !norm(m).includes(filtro) ? 'hidden' : ''}><label><input type="checkbox" data-m="${esc(m)}" ${it.marcas.includes(m) ? 'checked' : ''}>${fotoFicha(eansFoto(ti, [m]), '', 'marca')}<span>${esc(titulo(m))}<small>${linea(m)}</small></span></label></li>`).join('');
   aplicarFotos($('#hojaMarcas'));
 }
 
@@ -288,6 +291,55 @@ function pintarBarraTotal() {
   bt.hidden = false;
   bt.innerHTML = `<span><small>Lo más barato ${estado.dia === new Date().getDay() ? 'hoy' : 'el ' + DIAS[estado.dia].toLowerCase()}, en ${esc(nombreCad(ultimo.store.cad))}</small><b>${fmt(ultimo.total)}</b></span><a class="ir" href="#ahorro">Ver ticket</a>`;
 }
+
+/* ------------------------------------------------------------ ficha de producto */
+function abrirFicha(ean) {
+  const p = POR_EAN.get(ean); if (!p) return;
+  const [, nombre, marca, pres, ti] = p;
+  const interno = ean.startsWith('i');
+  // precio de este producto (1 unidad, con la mejor oferta) en cada súper cercano
+  const ctx = ctxDe(estado.dia);
+  const filas = [];
+  for (const s of cercanas()) {
+    const f = interpretarFila(getFila(s, ean)); if (!f) continue;
+    const l = mejorLinea(f, 1);
+    filas.push({ s, l, f, d: km(estado.ubic, s) });
+  }
+  filas.sort((a, b) => a.l.total - b.l.total || a.d - b.d);
+  const min = filas[0]?.l.total, max = filas[filas.length - 1]?.l.total;
+  const enLista = estado.lista.some(it => it.tipo === TIPOS[ti] && (!it.marcas.length || it.marcas.includes(marca || 'Sin marca')));
+  $('#fichaCuerpo').innerHTML = `
+    <div class="ficha-foto">${foto([ean], 'grande')}</div>
+    <h2 id="fichaNombre">${esc(titulo(nombre))}</h2>
+    <p class="ficha-meta">${[marca && `<b>${esc(titulo(marca))}</b>`, pres && esc(pres), esc(TIPOS[ti])].filter(Boolean).join('<span aria-hidden="true"> / </span>')}</p>
+    <p class="ficha-ean">${interno ? 'Código interno del súper' : `EAN ${esc(ean)}`}</p>
+    ${filas.length ? `<div class="ficha-rango"><span>Cerca tuyo</span><b>${fmt(min)}</b>${max - min >= 1 ? `<span>a ${fmt(max)}</span>` : ''}</div>
+    <ul class="ficha-precios">${filas.slice(0, 12).map((x, i) => `<li class="${i === 0 ? 'min' : ''}">
+        <span><b>${esc(nombreSuc(x.s))}</b><small>${esc(titulo(x.s.dir))}, a ${kmTxt(x.d)}</small></span>
+        <span class="r">${x.l.aplica && Math.round(x.l.unit) < Math.round(x.f.lista) ? `<s>${fmt(x.f.lista)}</s>` : ''}<b>${fmt(x.l.total)}</b>${x.l.promo ? `<span class="of">${esc(x.l.promo)}</span>` : ''}</span></li>`).join('')}</ul>`
+      : '<p class="ayuda">No lo encontramos en los súper cercanos.</p>'}
+    <button class="btn grande" type="button" id="fichaAgregar" ${enLista ? 'disabled' : ''}>${enLista ? 'Ya está en tu lista' : 'Agregar a la lista'}</button>`;
+  aplicarFotos($('#ficha'));
+  $('#fichaAgregar').onclick = () => {
+    const tipo = TIPOS[ti], marcas = [marca || 'Sin marca'];
+    const ex = estado.lista.find(i => i.tipo === tipo && i.marcas.join() === marcas.join());
+    if (ex) ex.qty++; else estado.lista.push({ tipo, marcas, qty: 1 });
+    cerrarFicha(); renderTodo(); toast(`Agregaste ${titulo(nombre)}`, 2000);
+  };
+  $('#velo').hidden = false; $('#ficha').hidden = false;
+  $('#ficha').scrollTop = 0;
+  setTimeout(() => $('#fichaCerrar').focus({ preventScroll: true }), 50);
+}
+function cerrarFicha() {
+  $('#ficha').hidden = true;
+  if ($('#hoja').hidden) $('#velo').hidden = true;
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-ficha]');
+  if (!b || !b.dataset.ficha) return;
+  e.preventDefault(); e.stopPropagation();
+  abrirFicha(b.dataset.ficha);
+}, true);
 
 /* ------------------------------------------------------------ ahorro */
 function vacio(icono, tituloTxt, texto, boton = '') {
@@ -304,7 +356,7 @@ const kmTxt = d => d.toFixed(1).replace('.', ',') + ' km';
 function lineasTicket(r) {
   return r.lineas.map(l => l.p === null
     ? `<div class="tl falta">${foto(eansFoto(TIPO_IDX.get(l.it.tipo), l.it.marcas))}<span class="n">${esc(l.it.tipo)}</span><span class="t">—</span><span class="d">${l.it.marcas.length ? 'No tiene la marca que elegiste' : 'No lo tiene'}</span></div>`
-    : `<div class="tl">${foto([l.ean])}<span class="n">${esc(l.it.tipo)}</span><span class="t">${fmt(l.total)}</span>
+    : `<div class="tl">${fotoFicha([l.ean])}<span class="n">${esc(l.it.tipo)}</span><span class="t">${fmt(l.total)}</span>
         <span class="d">${esc(titulo(POR_EAN.get(l.ean)?.[1] || ''))}</span>
         <span class="d">${l.it.qty} × ${fmt(l.unit)}${l.aplica && Math.round(l.unit) < Math.round(l.p) ? ` <span class="tachado">${fmt(l.p)}</span>` : ''}${l.promo ? ` <span class="of">${esc(l.promo)}</span>` : ''}${l.sinPago ? ` <span class="sinpago">${l.sinPago === 'oferta' ? 'Sin descuento por pago: ya tiene oferta' : 'Excluido de la promo de pago'}</span>` : ''}</span></div>`).join('');
 }

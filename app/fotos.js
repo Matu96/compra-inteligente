@@ -7,6 +7,8 @@ const API = 'https://world.openfoodfacts.org/api/v2/search';
 const LOTE = 50;                 // EANs por consulta (la API de búsqueda admite ~10 consultas por minuto)
 const CLAVE = 'ci-fotos-v1';
 const VENCE = 14 * 864e5;
+// Open Food Facts sirve la misma foto en 100, 200, 400 px y completa: para la ficha usamos 400
+const aGrande = u => u.replace(/\.(100|200)\.jpg$/, '.400.jpg');
 const PRECIOS_CLAROS = e => `https://imagenes.preciosclaros.gob.ar/productos/${e.padStart(13, '0')}.jpg`;        // se vuelven a consultar los "sin foto" cada 2 semanas
 
 const cache = new Map();         // ean -> url ('' = sin foto)
@@ -63,14 +65,16 @@ function pintar(raiz) {
       return programar();
     }
     // candidatas en orden: fotos de Open Food Facts y, si fallan o no hay, las de Precios Claros
-    const urls = [...eans.map(e => cache.get(e)).filter(Boolean), ...eans.slice(0, 2).map(PRECIOS_CLAROS)];
+    const grande = el.classList.contains('grande');
+    const urls = [...eans.map(e => cache.get(e)).filter(Boolean).map(u => grande ? aGrande(u) : u), ...eans.slice(0, 2).map(PRECIOS_CLAROS)];
     el.dataset.ok = '1';
     if (!urls.length) return;
+    el.classList.add('cargando');
     const img = new Image();
     img.alt = ''; img.loading = 'lazy'; img.decoding = 'async'; img.referrerPolicy = 'no-referrer';
     let i = 0;
-    img.onload = () => { if (img.naturalWidth > 10) el.classList.add('con-foto'); else img.onerror(); };
-    img.onerror = () => { if (++i < urls.length) img.src = urls[i]; else img.remove(); };
+    img.onload = () => { if (img.naturalWidth > 10) { el.classList.remove('cargando'); el.classList.add('con-foto'); } else img.onerror(); };
+    img.onerror = () => { if (++i < urls.length) img.src = urls[i]; else { img.remove(); el.classList.remove('cargando'); } };
     img.src = urls[0];
     el.appendChild(img);
   });

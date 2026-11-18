@@ -73,8 +73,8 @@ h2{font-size:1.125rem;font-weight:700}
 .etiqueta small{display:block;font-size:.6875rem;line-height:1.2;font-weight:600}
 .etiqueta b{display:block;font:800 1.375rem/1.05 var(--f-display)}
 .ticket-lineas{font-family:var(--f-ticket);font-size:.8125rem;margin-top:18px;border-top:1.5px dashed var(--linea);padding-top:10px}
-.tl{display:grid;grid-template-columns:40px 1fr auto;gap:2px 12px;padding:7px 0;align-items:start}
-.tl > .foto{grid-row:1 / span 3;width:40px;height:40px}
+.tl{display:grid;grid-template-columns:46px 1fr auto;gap:2px 12px;padding:7px 0;align-items:start}
+
 .tl .n{font-weight:600;font-family:var(--f-ui);font-size:.9375rem}
 .tl .v{color:var(--suave);font-size:.75rem}
 .tl .t{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
@@ -134,7 +134,7 @@ h2{font-size:1.125rem;font-weight:700}
 .sugg{position:absolute;left:-1.5px;right:-1.5px;top:calc(100% + 6px);background:var(--sup);border:1px solid var(--linea);border-radius:var(--r-m);
   z-index:6;max-height:340px;overflow:auto;display:none;box-shadow:0 14px 32px rgba(21,35,63,.16)}
 .sugg [role=option]{display:flex;gap:12px;align-items:center;padding:9px 14px;cursor:pointer;border-bottom:1px solid var(--linea)}
-.sugg .foto{width:40px;height:40px}
+
 .sugg [role=option]:last-child{border-bottom:0}
 .sugg [role=option].act,.sugg [role=option]:hover{background:var(--sel)}
 .sugg small{display:block;color:var(--suave);font-size:.8125rem}
@@ -143,7 +143,7 @@ h2{font-size:1.125rem;font-weight:700}
 .chip{border:1px solid var(--linea);background:var(--sup);padding:8px 12px;border-radius:999px;font-size:.875rem;cursor:pointer}
 .items{list-style:none;margin:14px 0 0;padding:0}
 .item{display:grid;grid-template-columns:auto 1fr auto;gap:4px 12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--linea)}
-.item > .foto{grid-row:1 / span 2;width:52px;height:52px}
+
 .item .n{font-weight:600}
 .item .marca-btn{grid-column:2;justify-self:start;display:inline-flex;align-items:center;gap:4px;border:0;background:var(--sel);border-radius:999px;
   padding:3px 10px;font-size:.8125rem;font-weight:600;cursor:pointer;max-width:100%}
@@ -234,11 +234,46 @@ h2{font-size:1.125rem;font-weight:700}
 .toast[hidden]{display:none}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
 
-/* fotos de producto */
-.foto{position:relative;display:block;flex:none;width:44px;height:44px;border-radius:10px;overflow:hidden;background:var(--sel)
-  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2393A0B8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 7h12l-1 13H7z'/%3E%3Cpath d='M9 7a3 3 0 0 1 6 0'/%3E%3C/svg%3E") center/50% no-repeat}
-.foto img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;padding:3px;opacity:0;transition:opacity .2s}
-.foto.con-foto{background:#fff;box-shadow:inset 0 0 0 1px var(--linea)}
-.foto.con-foto img{opacity:1}
-.hoja li label .foto{width:44px;height:44px}
+/* fotos de producto: tarjeta blanca, producto centrado con aire, el blanco de la foto se funde con la tarjeta */
+.foto-btn{border:0;padding:0;background:none;cursor:zoom-in;border-radius:14px;flex:none;display:block}
+.foto{position:relative;display:block;flex:none;width:48px;height:48px;border-radius:12px;overflow:hidden;
+  background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23B7C0CF' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 7h12l-1 13H7z'/%3E%3Cpath d='M9 7a3 3 0 0 1 6 0'/%3E%3C/svg%3E") center/46% no-repeat;
+  box-shadow:inset 0 0 0 1px rgba(21,35,63,.08), 0 1px 2px rgba(21,35,63,.06)}
+.foto img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;padding:12%;opacity:0;transform:scale(.97);
+  transition:opacity .25s ease, transform .35s ease;mix-blend-mode:multiply}
+.foto.con-foto{background-image:none}
+.foto.con-foto img{opacity:1;transform:none}
+.foto.cargando{background:linear-gradient(100deg,#fff 30%,#EEF1F6 50%,#fff 70%) 0 0/250% 100%;animation:brillo 1.2s linear infinite}
+@keyframes brillo{to{background-position:-150% 0}}
+.foto-btn:hover .foto.con-foto img{transform:scale(1.04)}
+.item .foto-btn{grid-row:1 / span 2}
+.item .foto{width:60px;height:60px;border-radius:14px}
+.tl > .foto-btn{grid-row:1 / span 3}
+.tl .foto{width:46px;height:46px}
+.sugg .foto{width:44px;height:44px}
+.hoja li label .foto{width:52px;height:52px}
+
+/* ficha de producto */
+.ficha{max-height:92vh;overflow:auto;padding-top:8px}
+.ficha .cerrar{position:absolute;top:14px;right:14px;z-index:2;width:38px;height:38px;border-radius:50%;border:0;display:grid;place-items:center;
+  background:color-mix(in srgb,var(--sup) 85%,transparent);box-shadow:0 1px 4px rgba(0,0,0,.12);cursor:pointer}
+.ficha-foto{margin:4px 0 18px;padding:18px;border-radius:20px;background:#fff;box-shadow:inset 0 0 0 1px rgba(21,35,63,.07)}
+.ficha-foto .foto{width:100%;height:auto;aspect-ratio:1/1;max-height:340px;margin:0 auto;border-radius:0;box-shadow:none;background-size:22%}
+.ficha-foto .foto img{padding:4%}
+.ficha h2{font-size:1.5rem;line-height:1.15}
+.ficha-meta{margin:6px 0 2px;color:var(--suave)}
+.ficha-meta b{color:var(--tinta)}
+.ficha-ean{margin:0 0 16px;color:var(--suave);font:500 .8125rem var(--f-ticket)}
+.ficha-rango{display:flex;align-items:baseline;gap:8px;padding:12px 0;border-top:1px solid var(--linea)}
+.ficha-rango span{color:var(--suave);font-size:.875rem}
+.ficha-rango b{font:800 1.75rem var(--f-display)}
+.ficha-precios{list-style:none;margin:0 0 16px;padding:0}
+.ficha-precios li{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--linea)}
+.ficha-precios li small{display:block;color:var(--suave);font-size:.8125rem}
+.ficha-precios .r{text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-variant-numeric:tabular-nums}
+.ficha-precios .r b{font:700 1.0625rem var(--f-display)}
+.ficha-precios s{color:var(--suave);font-size:.75rem}
+.ficha-precios li.min .r b{color:var(--ahorro)}
+@media (prefers-color-scheme: dark){ .foto{box-shadow:none} .foto.cargando{background:linear-gradient(100deg,#fff 30%,#DCE2EC 50%,#fff 70%) 0 0/250% 100%} }
+
 .sinpago{color:var(--alerta);font-family:var(--f-ui);font-size:.6875rem;font-weight:600}
