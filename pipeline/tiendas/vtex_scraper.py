@@ -6,6 +6,7 @@ que cada parte entre.
 """
 import asyncio
 import re
+from urllib.parse import quote, urlsplit, urlunsplit
 
 from tqdm import tqdm
 
@@ -46,6 +47,8 @@ def _imagen(url, tam=500):
     if not url:
         return None
     url = url.replace("http://", "https://", 1)
+    p = urlsplit(url)            # espacios o tildes en el nombre del archivo: codificados, si no el navegador falla
+    url = urlunsplit((p.scheme, p.netloc, quote(p.path, safe="/%-._~!$&'()*+,;=:@"), p.query, ""))
     return re.sub(r"(/arquivos/ids/\d+)(?:-\d+-\d+)?/", rf"\1-{tam}-{tam}/", url, count=1)
 
 

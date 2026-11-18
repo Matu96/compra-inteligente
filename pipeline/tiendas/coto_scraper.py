@@ -9,7 +9,7 @@
 import asyncio
 import json
 import re
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import quote, parse_qsl, urlencode, urlsplit, urlunsplit
 
 from tqdm import tqdm
 
@@ -173,6 +173,8 @@ def parsear(reg, fecha):
                "product.imagen", "sku.imagen")
     if img:
         img = img.replace("/fotos/medium/", "/fotos/large/").replace("/fotos/small/", "/fotos/large/")
+    if img:
+        img = quote(img, safe="/%-._~!$&'()*+,;=:@?#")       # espacios o tildes en la dirección
     if img and img.startswith("//"):
         img = "https:" + img
     elif img and img.startswith("/"):
