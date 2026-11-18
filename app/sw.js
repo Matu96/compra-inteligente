@@ -1,5 +1,5 @@
 // Service worker: la app abre sin conexión con los últimos precios descargados.
-const VERSION = 'ci-v1';
+const VERSION = 'ci-v2';
 const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'motor.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {

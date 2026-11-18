@@ -1,23 +1,33 @@
-import { DIAS, celdasCercanas, rankear, mejorDivision, porDiaDeLaSemana, fechaDelDia, km } from './motor.js';
+import { DIAS, celdasCercanas, rankear, mejorDivision, porDiaDeLaSemana, fechaDelDia, km, interpretarFila, lineaConPromo } from './motor.js';
 
 const $ = s => document.querySelector(s);
 const fmt = n => '$' + Math.round(n).toLocaleString('es-AR');
 const norm = s => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const titulo = s => /[a-z]/.test(s) ? s : (s || '').toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase());
+const titulo = s => /[a-záéíóúñ]/.test(s || '') ? s : (s || '').toLowerCase().replace(/(^|[\s(/-])\S/g, c => c.toUpperCase());
+const INICIAL = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
 
 const NOMBRES_CAD = { dia: 'Día', coto: 'Coto', carrefour: 'Carrefour', chango: 'Chango Más', jumbo: 'Jumbo', disco: 'Disco',
   vea: 'Vea', anonima: 'La Anónima', coope: 'Cooperativa Obrera', vital: 'Vital', diarco: 'Diarco', josimar: 'Josimar', nini: 'Nini' };
+const ICONO = {
+  pin: '<svg viewBox="0 0 24 24"><path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12Z"/><circle cx="12" cy="10" r="2.6"/></svg>',
+  ruta: '<svg viewBox="0 0 24 24"><path d="M3 11 21 3l-8 18-2-8z"/></svg>',
+  flecha: '<svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>',
+  dos: '<svg viewBox="0 0 24 24"><path d="M4 7h11M4 7l3-3M4 7l3 3M20 17H9m11 0-3-3m3 3-3 3"/></svg>',
+  marca: '<svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.3"/></svg>',
+  falta: '<svg viewBox="0 0 24 24"><path d="M12 8v5M12 16.5v.5"/><circle cx="12" cy="12" r="9"/></svg>',
+  lista: '<svg viewBox="0 0 24 24"><path d="M3 5h2l2.2 10.2a1 1 0 0 0 1 .8H17a1 1 0 0 0 1-.8L19.5 8H6"/><circle cx="9" cy="20" r="1.4"/><circle cx="17" cy="20" r="1.4"/></svg>',
+};
 
 /* ------------------------------------------------------------ estado */
 const guardado = (() => { try { return JSON.parse(localStorage.getItem('ci') || '{}'); } catch { return {}; } })();
 const estado = {
-  lista: (guardado.lista || []).filter(it => it.tipo),   // [{tipo: 'Yerba mate 1 kg', marcas: ['PLAYADITO'], qty}]
+  lista: (guardado.lista || []).filter(it => it.tipo),     // [{tipo: 'Yerba mate 1 kg', marcas: ['TARAGUI'], qty}]
   medios: new Set(guardado.medios || ['cuentadni']),
   radio: guardado.radio || 3,
-  ubic: guardado.ubic || null,                    // {lat, lng, label}
+  ubic: guardado.ubic || null,
   dia: new Date().getDay(),
-  abiertos: new Set(), verTodos: false, marcaAbierta: null,
+  abiertos: new Set(), verTodos: false, hojaItem: null,
 };
 function guardar() {
   const lista = estado.lista.map(({ tipo, marcas, qty }) => ({ tipo, marcas, qty }));
@@ -25,32 +35,31 @@ function guardar() {
 }
 
 let INDEX = null, PROMOS = { medios: [], promos: [] };
-// catálogo: TIPOS = productos genéricos; PROD = variantes [ean, nombre, marca, presentación, tipo]
 let TIPOS = [], TIPO_NORM = [], TIPO_IDX = new Map(), PROD = [], PROD_NORM = [], POR_TIPO = [], POR_EAN = new Map();
-const tiles = new Map();          // celda -> {sucursales, listas}
+const tiles = new Map();
 let stores = [];
+let ultimo = null;                      // último resultado (para la barra de la lista)
 
-const nombreCad = k => NOMBRES_CAD[k] || INDEX?.cadenas?.[k] || k;
+const nombreCad = k => NOMBRES_CAD[k] || titulo(INDEX?.cadenas?.[k] || k);
 const nombreMedio = id => id === 'efectivo' ? 'efectivo o débito' : (PROMOS.medios.find(m => m.id === id)?.nombre || id);
-
-/** Marcas de un producto genérico, en orden de popularidad. */
-function marcasDe(ti) {
-  const vistas = new Set(), out = [];
-  for (const pi of POR_TIPO[ti]) { const m = PROD[pi][2] || 'Sin marca'; if (!vistas.has(m)) { vistas.add(m); out.push(m); } }
-  return out;
-}
-/** Ítem de la lista → ítem para el motor, con los EANs aceptados. */
-function paraMotor(it) {
-  const ti = TIPO_IDX.get(it.tipo);
-  const eans = POR_TIPO[ti].filter(pi => !it.marcas.length || it.marcas.includes(PROD[pi][2] || 'Sin marca')).map(pi => PROD[pi][0]);
-  return { ...it, eans, nombre: it.tipo + (it.marcas.length ? ` (${it.marcas.map(titulo).join(', ')})` : '') };
-}
-const textoMarcas = it => it.marcas.length ? it.marcas.map(titulo).join(', ') : 'cualquiera, la más barata';
+const ctxDe = dia => ({ dia, fecha: fechaDelDia(dia), medios: new Set(['efectivo', ...estado.medios]), promos: PROMOS.promos });
 
 function getFila(store, ean) {
   if (store.dif && Object.prototype.hasOwnProperty.call(store.dif, ean)) return store.dif[ean];
   return store.listas[store.lp]?.[ean] ?? null;
 }
+function marcasDe(ti) {
+  const vistas = new Set(), out = [];
+  for (const pi of POR_TIPO[ti]) { const m = PROD[pi][2] || 'Sin marca'; if (!vistas.has(m)) { vistas.add(m); out.push(m); } }
+  return out;
+}
+function paraMotor(it) {
+  const ti = TIPO_IDX.get(it.tipo);
+  const eans = POR_TIPO[ti].filter(pi => !it.marcas.length || it.marcas.includes(PROD[pi][2] || 'Sin marca')).map(pi => PROD[pi][0]);
+  return { ...it, eans, nombre: it.tipo + (it.marcas.length ? ` (${it.marcas.map(titulo).join(', ')})` : '') };
+}
+const textoMarcas = it => !it.marcas.length ? 'Cualquier marca' : it.marcas.length === 1 ? titulo(it.marcas[0]) : `${titulo(it.marcas[0])} y ${it.marcas.length - 1} más`;
+const cercanas = () => estado.ubic ? stores.filter(s => km(estado.ubic, s) <= estado.radio) : [];
 
 function toast(msg, ms = 3500) {
   const t = $('#toast'); t.textContent = msg; t.hidden = false;
@@ -63,7 +72,6 @@ async function getJSON(url) {
   if (!r.ok) throw new Error(`${url}: ${r.status}`);
   return r.json();
 }
-
 async function cargarBase() {
   const [idx, cat, promos] = await Promise.all([getJSON('data/index.json'), getJSON('data/catalogo.json'), getJSON('promos.json')]);
   INDEX = idx; PROMOS = promos;
@@ -73,95 +81,103 @@ async function cargarBase() {
   POR_EAN = new Map(PROD.map(p => [p[0], p]));
   const f = new Date(idx.fecha + 'T12:00:00');
   const dias = Math.round((Date.now() - f) / 864e5);
-  $('#datosInfo').textContent = `Precios del ${DIAS[f.getDay()].toLowerCase()} ${f.getDate()}/${f.getMonth() + 1} · ${idx.sucursales.toLocaleString('es-AR')} sucursales` + (dias > 2 ? ` · ⚠ datos de hace ${dias} días` : '');
-  $('#promosInfo').textContent = `Promos bancarias actualizadas al ${promos.actualizado}.`;
-  // la lista se guarda por nombre de producto genérico (los índices cambian cada día)
+  $('#datosInfo').textContent = `Precios del ${DIAS[f.getDay()].toLowerCase()} ${f.getDate()}/${f.getMonth() + 1} de ${idx.sucursales.toLocaleString('es-AR')} sucursales de todo el país.` + (dias > 2 ? ` Tienen ${dias} días: puede haber cambios.` : '');
+  $('#promosInfo').textContent = `Promos bancarias revisadas el ${promos.actualizado.split('-').reverse().join('/')}.`;
   const antes = estado.lista.length;
   estado.lista = estado.lista.filter(it => TIPO_IDX.has(it.tipo));
   estado.lista.forEach(it => it.marcas ||= []);
-  if (estado.lista.length < antes) toast('Algunos productos de tu lista ya no están en el catálogo de hoy.');
+  if (estado.lista.length < antes) toast('Algunos productos de tu lista ya no están en los precios de hoy.');
 }
-
 async function cargarCeldas() {
   if (!estado.ubic || !INDEX) return;
   const necesarias = celdasCercanas(estado.ubic, estado.radio, INDEX.tam).filter(c => INDEX.celdas[c]);
   const faltan = necesarias.filter(c => !tiles.has(c));
   if (faltan.length) {
-    $('#out').innerHTML = '<div class="card empty">Buscando supermercados cerca…</div>';
-    await Promise.all(faltan.map(async c => {
-      try { tiles.set(c, await getJSON(`data/tiles/${c}.json`)); } catch (e) { console.warn(e); }
-    }));
+    $('#resultado').innerHTML = '<div class="vacio"><div class="cargando"></div><p>Buscando supermercados cerca…</p></div>';
+    await Promise.all(faltan.map(async c => { try { tiles.set(c, await getJSON(`data/tiles/${c}.json`)); } catch (e) { console.warn(e); } }));
   }
   stores = [];
-  for (const c of necesarias) {
-    const t = tiles.get(c); if (!t) continue;
-    for (const s of t.sucursales) stores.push({ ...s, listas: t.listas });
-  }
+  for (const c of necesarias) { const t = tiles.get(c); if (t) for (const s of t.sucursales) stores.push({ ...s, listas: t.listas }); }
 }
 
 /* ------------------------------------------------------------ ubicación */
 function setUbic(lat, lng, label) {
   estado.ubic = { lat, lng, label };
-  $('#ubicInfo').textContent = '📍 ' + label;
-  guardar();
-  cargarCeldas().then(renderOut);
+  guardar(); pintarUbic();
+  cargarCeldas().then(() => renderTodo());
 }
-
+function pintarUbic() {
+  const l = estado.ubic?.label || 'Elegí tu ubicación';
+  $('#chipUbicTxt').textContent = estado.ubic ? l.replace(/^Tu ubicación actual.*/, 'Cerca tuyo') : l;
+  $('#ubicInfo').textContent = estado.ubic ? l : 'Todavía no elegiste dónde estás.';
+  $('#btnGPS').textContent = estado.ubic ? 'Actualizar mi ubicación' : 'Usar mi ubicación';
+}
 function pedirGPS(silencioso = false) {
-  if (!navigator.geolocation) { if (!silencioso) toast('Tu navegador no permite ubicación. Escribí una dirección.'); return; }
-  const b = $('#btnGPS'); b.disabled = true; b.textContent = 'Ubicando…';
+  if (!navigator.geolocation) { if (!silencioso) toast('Este navegador no comparte la ubicación. Escribí una dirección.'); return; }
+  document.querySelectorAll('[data-gps]').forEach(b => { b.disabled = true; b.textContent = 'Buscando tu ubicación…'; });
+  $('#btnGPS').disabled = true;
   navigator.geolocation.getCurrentPosition(p => {
-    b.disabled = false; b.textContent = 'Actualizar ubicación';
-    setUbic(p.coords.latitude, p.coords.longitude, `Tu ubicación actual (±${Math.round(p.coords.accuracy)} m)`);
+    $('#btnGPS').disabled = false;
+    setUbic(p.coords.latitude, p.coords.longitude, `Tu ubicación actual (precisión ${Math.round(p.coords.accuracy)} m)`);
   }, err => {
-    b.disabled = false; b.textContent = 'Usar mi ubicación';
-    if (!silencioso) toast(err.code === 1 ? 'No diste permiso de ubicación. Podés escribir una dirección.' : 'No pude obtener tu ubicación. Probá con una dirección.');
+    $('#btnGPS').disabled = false; pintarUbic(); renderAhorro();
+    if (!silencioso) toast(err.code === 1 ? 'Sin permiso de ubicación. Podés escribir una dirección en “Dónde y cómo”.' : 'No se pudo obtener la ubicación. Probá con una dirección.');
   }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 300000 });
 }
-
 async function buscarDireccion(q) {
   try {
     const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=ar&accept-language=es&q=${encodeURIComponent(q)}`);
     const [hit] = await r.json();
-    if (!hit) return toast('No encontré esa dirección. Probá agregando barrio o localidad.');
-    setUbic(+hit.lat, +hit.lon, hit.display_name.split(',').slice(0, 3).join(','));
-  } catch { toast('No pude buscar la dirección (¿sin conexión?).'); }
+    if (!hit) return toast('No encontré esa dirección. Agregá el barrio o la localidad.');
+    setUbic(+hit.lat, +hit.lon, hit.display_name.split(',').slice(0, 2).join(','));
+    location.hash = '#ahorro';
+  } catch { toast('No se pudo buscar la dirección. Revisá la conexión.'); }
+}
+
+/* ------------------------------------------------------------ navegación */
+function irA() {
+  const v = ['ahorro', 'lista', 'ajustes'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'ahorro';
+  document.querySelectorAll('.vista').forEach(s => s.classList.toggle('activa', s.id === 'v-' + v));
+  document.querySelectorAll('.tabs a').forEach(a => a.dataset.v === v ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current'));
+  pintarBarraTotal();
+  window.scrollTo({ top: 0 });
 }
 
 /* ------------------------------------------------------------ controles */
 function initControles() {
-  $('#dia').innerHTML = DIAS.map((d, i) => `<option value="${i}">${d}${i === new Date().getDay() ? ' (hoy)' : ''}</option>`).join('');
-  $('#dia').value = estado.dia;
-  $('#dia').onchange = e => { estado.dia = +e.target.value; renderOut(); };
+  const hoy = new Date().getDay();
+  $('#dias').innerHTML = DIAS.map((d, i) => `<button type="button" role="radio" data-d="${i}" class="${i === hoy ? 'hoy' : ''}" aria-label="${d}${i === hoy ? ', hoy' : ''}">${i === hoy ? 'Hoy' : '&nbsp;'}<b>${INICIAL[i]}</b></button>`).join('');
+  $('#dias').onclick = e => { const b = e.target.closest('[data-d]'); if (b) { estado.dia = +b.dataset.d; renderAhorro(); } };
   $('#radio').value = estado.radio;
   $('#radioLbl').textContent = estado.radio + ' km';
   let tRadio;
   $('#radio').oninput = e => {
     estado.radio = +e.target.value; $('#radioLbl').textContent = estado.radio + ' km'; guardar();
-    clearTimeout(tRadio); tRadio = setTimeout(() => cargarCeldas().then(renderOut), 250);
+    clearTimeout(tRadio); tRadio = setTimeout(() => cargarCeldas().then(() => renderTodo()), 250);
   };
   $('#btnGPS').onclick = () => pedirGPS(false);
+  $('#chipUbic').onclick = () => { location.hash = '#ajustes'; };
   $('#formDir').onsubmit = e => { e.preventDefault(); const q = $('#dir').value.trim(); if (q) buscarDireccion(q); };
-  if (estado.ubic) $('#ubicInfo').textContent = '📍 ' + estado.ubic.label;
+  $('#vaciar').onclick = () => { estado.lista = []; renderTodo(); };
+  window.addEventListener('hashchange', irA);
 
-  // buscador: productos genéricos ("Yerba mate 1 kg") y, si escribís una marca, ese genérico con esa marca
+  // buscador
   const b = $('#buscar'), sg = $('#sugg');
   let act = 0, opts = [];
   const pintar = () => {
-    sg.innerHTML = opts.map((o, i) => `<div data-i="${i}" class="${i === act ? 'act' : ''}">${esc(TIPOS[o.ti])}${o.marca ? ` · <b>${esc(titulo(o.marca))}</b>` : ''}<br><span class="note">${o.marca ? 'solo esta marca' : `cualquier marca, la más barata · ${marcasDe(o.ti).length} marcas`}</span></div>`).join('');
+    sg.innerHTML = opts.map((o, i) => `<div role="option" data-i="${i}" class="${i === act ? 'act' : ''}" aria-selected="${i === act}">${esc(TIPOS[o.ti])}${o.marca ? `, ${esc(titulo(o.marca))}` : ''}<small>${o.marca ? 'Solo esta marca' : `Cualquier marca, la más barata de ${marcasDe(o.ti).length}`}</small></div>`).join('');
     sg.style.display = opts.length ? 'block' : 'none';
   };
   b.oninput = () => {
     const toks = norm(b.value).split(/\s+/).filter(Boolean);
     opts = [];
     if (toks.length) {
-      for (let t = 0; t < TIPOS.length && opts.length < 8; t++)
-        if (toks.every(k => TIPO_NORM[t].includes(k))) opts.push({ ti: t });
+      for (let t = 0; t < TIPOS.length && opts.length < 8; t++) if (toks.every(k => TIPO_NORM[t].includes(k))) opts.push({ ti: t });
       const vistos = new Set();
       for (let i = 0; i < PROD.length && opts.length < 16; i++) {
         const p = PROD[i], clave = p[4] + '|' + p[2];
         if (vistos.has(clave) || !toks.every(k => PROD_NORM[i].includes(k) || TIPO_NORM[p[4]].includes(k))) continue;
-        if (!toks.some(k => norm(p[2]).includes(k))) continue;       // solo si escribió (parte de) la marca
+        if (!toks.some(k => norm(p[2]).includes(k))) continue;
         vistos.add(clave); opts.push({ ti: p[4], marca: p[2] || 'Sin marca' });
       }
     }
@@ -171,144 +187,233 @@ function initControles() {
     const tipo = TIPOS[o.ti], marcas = o.marca ? [o.marca] : [];
     const ex = estado.lista.find(i => i.tipo === tipo && i.marcas.join() === marcas.join());
     if (ex) ex.qty++; else estado.lista.push({ tipo, marcas, qty: 1 });
-    b.value = ''; opts = []; pintar(); render();
+    b.value = ''; opts = []; pintar(); renderTodo();
+    toast(`Agregaste ${tipo}`, 1800);
   };
   b.onkeydown = e => {
     if (e.key === 'Enter' && opts[act]) { agregar(opts[act]); e.preventDefault(); }
-    if (e.key === 'ArrowDown') { act = Math.min(act + 1, opts.length - 1); pintar(); }
-    if (e.key === 'ArrowUp') { act = Math.max(act - 1, 0); pintar(); }
+    if (e.key === 'ArrowDown') { act = Math.min(act + 1, opts.length - 1); pintar(); e.preventDefault(); }
+    if (e.key === 'ArrowUp') { act = Math.max(act - 1, 0); pintar(); e.preventDefault(); }
+    if (e.key === 'Escape') { opts = []; pintar(); }
   };
   sg.onmousedown = e => { const d = e.target.closest('[data-i]'); if (d) { e.preventDefault(); agregar(opts[+d.dataset.i]); } };
   b.onblur = () => setTimeout(() => sg.style.display = 'none', 150);
+  $('#sugerencias').onclick = e => { const c = e.target.closest('[data-ti]'); if (c) agregar({ ti: +c.dataset.ti }); };
+
+  // hoja de marcas
+  $('#velo').onclick = cerrarHoja; $('#hojaListo').onclick = cerrarHoja;
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#hoja').hidden) cerrarHoja(); });
+  $('#hojaFiltro').oninput = e => {
+    const q = norm(e.target.value);
+    $('#hojaMarcas').querySelectorAll('li[data-m]').forEach(li => li.hidden = !!q && !norm(li.dataset.m).includes(q));
+  };
+  $('#hojaMarcas').onchange = e => {
+    const it = estado.lista[estado.hojaItem]; if (!it) return;
+    const m = e.target.dataset.m;
+    if (m === '') it.marcas = [];
+    else it.marcas = e.target.checked ? [...new Set([...it.marcas, m])] : it.marcas.filter(x => x !== m);
+    pintarHoja(); renderTodo(false);
+  };
 }
 
-function renderSide() {
-  $('#medios').innerHTML = PROMOS.medios.map(m => `<span class="chip ${estado.medios.has(m.id) ? 'on' : ''}" data-m="${m.id}">${esc(m.nombre)}</span>`).join('');
-  $('#medios').querySelectorAll('.chip').forEach(c => c.onclick = () => {
-    const id = c.dataset.m; estado.medios.has(id) ? estado.medios.delete(id) : estado.medios.add(id); render();
-  });
-  $('#lista').innerHTML = estado.lista.length ? estado.lista.map((it, i) => {
-    const abierta = estado.marcaAbierta === i;
-    const marcas = abierta ? marcasDe(TIPO_IDX.get(it.tipo)) : [];
-    return `<div class="item"><span class="n">${esc(it.tipo)}<button class="marca" data-a="m" data-i="${i}">Marca: ${esc(textoMarcas(it))} ${abierta ? '▴' : '▾'}</button></span>
-      <span class="qty"><button data-a="-" data-i="${i}" aria-label="menos">−</button><b style="min-width:20px;text-align:center">${it.qty}</b><button data-a="+" data-i="${i}" aria-label="más">+</button></span>
-      <button class="x" data-a="x" data-i="${i}" aria-label="quitar">×</button></div>
-      ${abierta ? `<div class="marcas"><input type="text" class="filtroMarca" placeholder="Filtrar ${marcas.length} marcas…">
-        <div class="chips"><span class="chip ${it.marcas.length ? '' : 'on'}" data-mc="">Cualquiera (la más barata)</span>
-        ${marcas.map(m => `<span class="chip ${it.marcas.includes(m) ? 'on' : ''}" data-mc="${esc(m)}">${esc(titulo(m))}</span>`).join('')}</div>
-        <p class="note" style="margin:6px 0 0">Podés elegir varias: en cada súper se usa la más barata de las que marques.</p></div>` : ''}`;
-  }).join('') : '<p class="note">Buscá productos y agregalos a tu lista. Después podés elegir marcas o dejar “la más barata”.</p>';
+/* ------------------------------------------------------------ lista */
+function pintarCuenta() {
+  const n = estado.lista.reduce((a, it) => a + it.qty, 0);
+  $('#cuenta').hidden = !n; $('#cuenta').textContent = n;
+}
+function renderLista() {
+  pintarCuenta();
+  $('#vaciar').hidden = !estado.lista.length;
+  const populares = [];
+  for (let t = 0; t < TIPOS.length && populares.length < 10; t++) if (!estado.lista.some(i => i.tipo === TIPOS[t])) populares.push(t);
+  $('#sugerencias').innerHTML = estado.lista.length < 6 && populares.length
+    ? `<h2>${estado.lista.length ? 'Sumá algo más' : 'Lo que más se compra'}</h2><div class="chips">${populares.map(t => `<button type="button" class="chip" data-ti="${t}">${esc(TIPOS[t])}</button>`).join('')}</div>` : '';
+  $('#lista').innerHTML = estado.lista.map((it, i) => `
+    <li class="item"><span class="n">${esc(it.tipo)}</span>
+      <span class="paso"><button type="button" data-a="-" data-i="${i}" aria-label="Uno menos de ${esc(it.tipo)}">−</button><b aria-live="polite">${it.qty}</b><button type="button" data-a="+" data-i="${i}" aria-label="Uno más de ${esc(it.tipo)}">+</button></span>
+      <button type="button" class="marca-btn" data-a="m" data-i="${i}" aria-haspopup="dialog"><span>${esc(textoMarcas(it))}</span>${ICONO.flecha}</button></li>`).join('');
   $('#lista').querySelectorAll('button[data-a]').forEach(btn => btn.onclick = () => {
     const i = +btn.dataset.i, a = btn.dataset.a;
-    if (a === 'm') { estado.marcaAbierta = estado.marcaAbierta === i ? null : i; renderSide(); return; }
+    if (a === 'm') return abrirHoja(i);
     if (a === '+') estado.lista[i].qty++;
-    if (a === '-' && !--estado.lista[i].qty) { estado.lista.splice(i, 1); estado.marcaAbierta = null; }
-    if (a === 'x') { estado.lista.splice(i, 1); estado.marcaAbierta = null; }
-    render();
+    if (a === '-' && !--estado.lista[i].qty) estado.lista.splice(i, 1);
+    renderTodo();
   });
-  const panel = $('#lista .marcas');
-  if (panel) {
-    const it = estado.lista[estado.marcaAbierta];
-    panel.querySelectorAll('[data-mc]').forEach(ch => ch.onclick = () => {
-      const m = ch.dataset.mc;
-      if (!m) it.marcas = [];
-      else it.marcas = it.marcas.includes(m) ? it.marcas.filter(x => x !== m) : [...it.marcas, m];
-      render();
-    });
-    panel.querySelector('.filtroMarca').oninput = e => {
-      const q = norm(e.target.value);
-      panel.querySelectorAll('[data-mc]').forEach(ch => { if (ch.dataset.mc) ch.hidden = q && !norm(ch.dataset.mc).includes(q); });
-    };
-  }
 }
 
-/* ------------------------------------------------------------ resultados */
-function renderOut() {
-  const out = $('#out');
-  if (!INDEX) return;
-  if (!estado.ubic) { out.innerHTML = '<div class="card empty">📍 Tocá <b>Usar mi ubicación</b> o escribí una dirección para buscar supermercados cerca.</div>'; return; }
-  if (!estado.lista.length) { out.innerHTML = `<div class="card empty">Hay ${stores.filter(s => km(estado.ubic, s) <= estado.radio).length} sucursales a menos de ${estado.radio} km.<br>Agregá productos a tu lista para ver dónde conviene comprar.</div>`; return; }
+function abrirHoja(i) {
+  estado.hojaItem = i; $('#hojaFiltro').value = '';
+  pintarHoja();
+  $('#velo').hidden = false; $('#hoja').hidden = false;
+  setTimeout(() => $('#hojaFiltro').focus({ preventScroll: true }), 50);
+}
+function cerrarHoja() { $('#velo').hidden = true; $('#hoja').hidden = true; estado.hojaItem = null; }
+function pintarHoja() {
+  const it = estado.lista[estado.hojaItem]; if (!it) return;
+  const ti = TIPO_IDX.get(it.tipo);
+  $('#hojaTitulo').textContent = it.tipo;
+  // por marca: precio más bajo (con oferta, 1 unidad) y en cuántos súper cercanos está
+  const cerca = cercanas(), info = new Map();
+  for (const pi of POR_TIPO[ti]) {
+    const [ean, , marca] = PROD[pi], m = marca || 'Sin marca';
+    const x = info.get(m) || { min: Infinity, sucs: new Set() };
+    for (const s of cerca) {
+      const f = interpretarFila(getFila(s, ean)); if (!f) continue;
+      x.min = Math.min(x.min, lineaConPromo(f.lista, 1, f.promo).total); x.sucs.add(s.id);
+    }
+    info.set(m, x);
+  }
+  const marcas = marcasDe(ti).sort((a, b) => (info.get(b).sucs.size > 0) - (info.get(a).sucs.size > 0) || info.get(a).min - info.get(b).min);
+  const linea = m => { const x = info.get(m); return x.sucs.size ? `Desde ${fmt(x.min)} en ${x.sucs.size} súper cerca` : 'No está en los súper cercanos'; };
+  const filtro = norm($('#hojaFiltro').value);
+  $('#hojaMarcas').innerHTML = `<li class="cualquiera"><label><input type="checkbox" data-m="" ${it.marcas.length ? '' : 'checked'}><span>Cualquier marca<small>Se elige la más barata en cada súper</small></span></label></li>` +
+    marcas.map(m => `<li data-m="${esc(m)}" ${filtro && !norm(m).includes(filtro) ? 'hidden' : ''}><label><input type="checkbox" data-m="${esc(m)}" ${it.marcas.includes(m) ? 'checked' : ''}><span>${esc(titulo(m))}<small>${linea(m)}</small></span></label></li>`).join('');
+}
 
-  const ctx = { dia: estado.dia, fecha: fechaDelDia(estado.dia), medios: new Set(['efectivo', ...estado.medios]), promos: PROMOS.promos };
+function pintarBarraTotal() {
+  const bt = $('#barraTotal');
+  if (!ultimo || location.hash !== '#lista') { bt.hidden = true; return; }
+  bt.hidden = false;
+  bt.innerHTML = `<span><small>Lo más barato ${estado.dia === new Date().getDay() ? 'hoy' : 'el ' + DIAS[estado.dia].toLowerCase()}, en ${esc(nombreCad(ultimo.store.cad))}</small><b>${fmt(ultimo.total)}</b></span><a class="ir" href="#ahorro">Ver ticket</a>`;
+}
+
+/* ------------------------------------------------------------ ahorro */
+function vacio(icono, tituloTxt, texto, boton = '') {
+  return `<div class="vacio"><div class="ilus">${icono}</div><h2>${tituloTxt}</h2><p>${texto}</p>${boton}</div>`;
+}
+const mapa = s => `https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lng}`;
+const nombreSuc = s => {
+  if (!NOMBRES_CAD[s.cad]) return titulo(s.b) || nombreCad(s.cad);
+  const f = norm(s.b).match(/\b(market|express|maxi|hiper|mini|super|mayorista|cerca)\b/);
+  return NOMBRES_CAD[s.cad] + (f && !(s.cad === 'chango' && f[1] === 'mas') ? ' ' + titulo(f[1]) : '');
+};
+const kmTxt = d => d.toFixed(1).replace('.', ',') + ' km';
+
+function lineasTicket(r) {
+  return r.lineas.map(l => l.p === null
+    ? `<div class="tl falta"><span class="n">${esc(l.it.tipo)}</span><span class="t">—</span><span class="d">${l.it.marcas.length ? 'No tiene la marca que elegiste' : 'No lo tiene'}</span></div>`
+    : `<div class="tl"><span class="n">${esc(l.it.tipo)}</span><span class="t">${fmt(l.total)}</span>
+        <span class="d">${esc(titulo(POR_EAN.get(l.ean)?.[1] || ''))}</span>
+        <span class="d">${l.it.qty} × ${fmt(l.unit)}${l.aplica && Math.round(l.unit) < Math.round(l.p) ? ` <span class="tachado">${fmt(l.p)}</span>` : ''}${l.promo ? ` <span class="of">${esc(l.promo)}</span>` : ''}</span></div>`).join('');
+}
+
+function renderAhorro() {
+  $('#dias').querySelectorAll('[data-d]').forEach(b => b.setAttribute('aria-checked', +b.dataset.d === estado.dia));
+  const out = $('#resultado');
+  ultimo = null;
+  if (!INDEX) return;
+  if (!estado.ubic) {
+    out.innerHTML = vacio(ICONO.pin, 'Primero, ¿dónde estás?', 'Con tu ubicación buscamos los supermercados cercanos. Queda solo en tu teléfono.',
+      '<button class="btn grande" type="button" data-gps>Usar mi ubicación</button><p style="margin-top:12px"><a class="link" href="#ajustes">Prefiero escribir una dirección</a></p>');
+    out.querySelector('[data-gps]').onclick = () => pedirGPS(false);
+    return pintarBarraTotal();
+  }
+  const cerca = cercanas().length;
+  if (!estado.lista.length) {
+    out.innerHTML = vacio(ICONO.lista, 'Armá tu lista', `Hay ${cerca} ${cerca === 1 ? 'supermercado' : 'supermercados'} a menos de ${estado.radio} km. Agregá lo que vas a comprar y te mostramos dónde sale menos.`,
+      '<a class="btn grande" href="#lista">Agregar productos</a>');
+    return pintarBarraTotal();
+  }
+  const ctx = ctxDe(estado.dia);
   const lista = estado.lista.map(paraMotor);
   const res = rankear(stores, estado.ubic, estado.radio, lista, getFila, ctx);
-  if (!res.length) { out.innerHTML = `<div class="card empty">No encontré supermercados con estos productos a menos de ${estado.radio} km. Probá ampliar la distancia.</div>`; return; }
-
+  if (!res.length) {
+    out.innerHTML = vacio(ICONO.pin, 'No hay súper con estos productos cerca', `Probá ampliar la distancia (ahora es ${estado.radio} km) o cambiar alguna marca.`, '<a class="btn grande" href="#ajustes">Ampliar la distancia</a>');
+    return pintarBarraTotal();
+  }
   const comp = res.filter(r => !r.faltan.length);
   const top = comp[0] || res[0];
+  ultimo = top;
   const prom = comp.length ? comp.reduce((a, r) => a + r.total, 0) / comp.length : top.total;
-  const caro = comp.length ? comp[comp.length - 1].total : top.total;
-  const mapa = s => `https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lng}`;
-  const nom = s => esc(nombreCad(s.cad));
-  const hoyTxt = estado.dia === new Date().getDay() ? 'hoy' : 'el ' + DIAS[estado.dia].toLowerCase();
+  const ahorro = prom - top.total;
+  const cuando = estado.dia === new Date().getDay() ? 'hoy' : 'el ' + DIAS[estado.dia].toLowerCase();
 
-  let h = `<div class="hero"><div class="k">Mejor opción ${hoyTxt}</div>
-    <div class="big">${fmt(top.total)}</div>
-    <div>Comprá en <b>${nom(top.store)}</b> · ${esc(titulo(top.store.dir))} (${top.dist.toFixed(1)} km) pagando con <b>${esc(nombreMedio(top.pago.medio))}</b>. <a href="${mapa(top.store)}" target="_blank" rel="noopener">Cómo llegar →</a></div>
-    <div class="note" style="margin-top:4px">Ofertas del súper: −${fmt(top.promoSuper)} · Descuento por medio de pago: −${fmt(top.pago.desc)}${top.pago.nota ? ' (' + esc(top.pago.nota) + ')' : ''}</div>
-    ${top.faltan.length ? `<div class="miss" style="margin-top:6px">Ningún súper cercano tiene toda tu lista. Acá faltan: ${top.faltan.map(f => esc(f.nombre)).join(', ')}.</div>` : ''}
-    ${comp.length > 1 ? `<span class="save">Ahorrás ${fmt(prom - top.total)} vs. el promedio · ${fmt(caro - top.total)} vs. el más caro</span>` : ''}</div>`;
+  let h = `<article class="ticket" aria-label="Ticket estimado en ${esc(nombreCad(top.store.cad))}">
+    <div class="ticket-cab"><div><h2>${esc(nombreSuc(top.store))}</h2>
+      <p>${esc(titulo(top.store.dir))}${top.store.loc ? ', ' + esc(top.store.loc) : ''}. A ${kmTxt(top.dist)}</p>
+      <a class="como-llegar" href="${mapa(top.store)}" target="_blank" rel="noopener">${ICONO.ruta}Cómo llegar</a></div>
+      ${comp.length > 1 && ahorro >= 1 ? `<div class="etiqueta"><small>Ahorrás frente al promedio de la zona</small><b>${fmt(ahorro)}</b></div>` : ''}</div>
+    <div class="ticket-lineas">${lineasTicket(top)}</div>
+    <div class="ticket-sum">
+      ${top.promoSuper > 0 ? `<div class="ts"><span>Sin ofertas</span><span>${fmt(top.sub + top.promoSuper)}</span></div><div class="ts desc"><span>Ofertas del súper</span><span>−${fmt(top.promoSuper)}</span></div>` : ''}
+      ${top.pago.desc ? `<div class="ts desc"><span>Pagando con ${esc(nombreMedio(top.pago.medio))}<small>${esc(top.pago.nota)}${top.promoSuper > 0 ? '. Se suma a las ofertas' : ''}${top.pago.topeado ? '. Llega al tope' : ''}</small></span><span>−${fmt(top.pago.desc)}</span></div>`
+        : `<div class="ts"><span>Pago<small>Ninguno de tus medios tiene promo acá ${cuando}</small></span><span>$0</span></div>`}
+      <div class="ticket-total"><span>Total ${cuando}</span><b>${fmt(top.total)}</b></div>
+      ${top.faltan.length ? `<p class="aviso-faltan">Ningún súper cercano tiene toda la lista. Acá faltan ${top.faltan.length}.</p>` : ''}
+    </div></article>`;
 
+  // ideas para ahorrar más
+  const ideas = [];
   if (comp.length && estado.lista.some(it => it.marcas.length)) {
     const libre = estado.lista.map(it => paraMotor({ ...it, marcas: [] }));
     const mejorLibre = rankear(stores, estado.ubic, estado.radio, libre, getFila, ctx).find(r => !r.faltan.length);
     if (mejorLibre && top.total - mejorLibre.total > 500)
-      h += `<div class="tip">🏷️ <b>Tus marcas te cuestan ${fmt(top.total - mejorLibre.total)} de más.</b> Con la más barata de cada producto pagarías ${fmt(mejorLibre.total)} en ${nom(mejorLibre.store)}. <button class="btn ghost" id="sinMarcas" style="margin-top:6px">Usar la más barata en todo</button></div>`;
+      ideas.push(`<div class="idea"><span class="ic">${ICONO.marca}</span><div><p>Las marcas que elegiste suman <b>${fmt(top.total - mejorLibre.total)}</b>. Con la más barata de cada producto pagarías ${fmt(mejorLibre.total)} en ${esc(nombreCad(mejorLibre.store.cad))}.</p><button class="btn sec" type="button" id="sinMarcas">Usar la más barata en todo</button></div></div>`);
   }
-
   for (const r of comp.slice(0, 3)) {
     const c = r.casi.map(c => { const pot = r.sub + c.falta; return { c, tot: pot - (c.tope == null ? pot * c.pct : Math.min(pot * c.pct, c.tope)) }; })
       .find(x => x.tot < top.total + x.c.falta * 0.5);
-    if (c) { h += `<div class="tip">💡 En <b>${nom(r.store)}</b> te faltan <b>${fmt(c.c.falta)}</b> para activar “${esc(c.c.nota)}” con ${esc(nombreMedio(c.c.medio))}. Si igual ibas a comprar algo más, ahí te conviene.</div>`; break; }
+    if (c) { ideas.push(`<div class="idea"><span class="ic">${ICONO.falta}</span><p>En ${esc(nombreCad(r.store.cad))} te faltan <b>${fmt(c.c.falta)}</b> para la promo de ${esc(nombreMedio(c.c.medio))} (${esc(c.c.nota.charAt(0).toLowerCase() + c.c.nota.slice(1))}). Si ibas a comprar algo más, sumalo ahí.</p></div>`); break; }
   }
-
   const div = mejorDivision(res, lista, getFila, ctx);
-  if (div) h += `<div class="tip">🛒 <b>¿Te da para ir a dos súper?</b> Si comprás ${div.ra.lineas.length} productos en <b>${nom(div.ra.store)}</b> (${div.da.toFixed(1)} km) y ${div.rb.lineas.length} en <b>${nom(div.rb.store)}</b> (${div.db.toFixed(1)} km) pagás ${fmt(div.tot)}: <b>${fmt(div.ahorro)} menos</b>.</div>`;
+  if (div) ideas.push(`<div class="idea"><span class="ic">${ICONO.dos}</span><p>Si dividís la compra, ${div.ra.lineas.length} productos en ${esc(nombreCad(div.ra.store.cad))} y ${div.rb.lineas.length} en ${esc(nombreCad(div.rb.store.cad))}, pagás <b>${fmt(div.tot)}</b>: ${fmt(div.ahorro)} menos.</p></div>`);
+  h += ideas.join('');
 
+  // semana
   const porDia = porDiaDeLaSemana(stores, estado.ubic, estado.radio, lista, getFila, ctx);
   const vals = porDia.filter(Boolean).map(x => x.total);
-  if (vals.length) {
-    const mx = Math.max(...vals), mn = Math.min(...vals), best = porDia.find(x => x && x.total === mn);
-    const sel = porDia[estado.dia];
-    h += `<div class="card"><h2>¿Y si comprás otro día?</h2>
-      <p style="margin:0 0 4px">${best.dia !== estado.dia && sel && sel.total - mn > 1
-        ? `El <b>${DIAS[best.dia].toLowerCase()}</b> en ${esc(nombreCad(best.cad))} con ${esc(nombreMedio(best.medio))} pagarías <b>${fmt(mn)}</b>: ${fmt(sel.total - mn)} menos que ${hoyTxt}.`
-        : `${hoyTxt[0].toUpperCase() + hoyTxt.slice(1)} ya es el mejor día de la semana para esta lista.`}</p>
-      <div class="days">${porDia.map((x, d) => x ? `<div class="bar ${x.total === mn ? 'best' : ''} ${d === estado.dia ? 'sel' : ''}"><b>${Math.round(x.total / 1000)}k</b><i style="height:${mx === mn ? 60 : 25 + 75 * (x.total - mn) / (mx - mn)}%"></i><span>${DIAS[d].slice(0, 3)}</span></div>` : `<div class="bar"><span>${DIAS[d].slice(0, 3)}</span></div>`).join('')}</div>
-      <p class="note" style="margin:6px 0 0">Usa los precios y ofertas del súper de la última publicación y las promos bancarias de cada día.</p></div>`;
+  if (vals.length > 1) {
+    const mx = Math.max(...vals), mn = Math.min(...vals), best = porDia.find(x => x && x.total === mn), sel = porDia[estado.dia];
+    const otroDia = best.dia !== estado.dia && sel && sel.total - mn > 1;
+    h += `<section class="semana"><h2>${otroDia ? `El ${DIAS[best.dia].toLowerCase()} pagás ${fmt(sel.total - mn)} menos` : `${cuando.charAt(0).toUpperCase() + cuando.slice(1)} es el mejor día para esta lista`}</h2>
+      <p>${otroDia ? `En ${esc(nombreCad(best.cad))} con ${esc(nombreMedio(best.medio))}: ${fmt(mn)}. Tocá un día para ver su ticket.` : 'Mejor total posible cada día con tus medios de pago. Tocá un día para ver su ticket.'}</p>
+      <div class="barras">${porDia.map((x, d) => x
+        ? `<button type="button" class="barra ${x.total === mn ? 'mejor' : ''} ${d === estado.dia ? 'sel' : ''}" data-d="${d}" aria-label="${DIAS[d]}: ${fmt(x.total)}"><b>${'$' + (x.total / 1000).toFixed(1).replace('.', ',')}k</b><i style="height:${mx === mn ? 60 : 22 + 66 * (x.total - mn) / (mx - mn)}%"></i>${INICIAL[d]}</button>`
+        : `<span class="barra">${INICIAL[d]}</span>`).join('')}</div></section>`;
   }
 
-  const visibles = estado.verTodos ? res : res.slice(0, 12);
-  h += `<div class="card"><h2>Supermercados a menos de ${estado.radio} km (${res.length})</h2>`;
-  visibles.forEach((r, i) => {
-    const s = r.store, open = estado.abiertos.has(s.id);
-    h += `<div class="store ${i === 0 && !r.faltan.length ? 'best' : ''} ${open ? 'open' : ''}" data-id="${esc(s.id)}">
-      <div class="top"><span class="rank">${i + 1}</span>
-        <div style="min-width:0"><div class="name">${esc(titulo(s.b) || nombreCad(s.cad))} <span class="meta">· ${r.dist.toFixed(1)} km</span></div>
-        <div class="meta">${esc(titulo(s.dir))}${s.loc ? ', ' + esc(s.loc) : ''}</div>
-        <div>${r.pago.desc ? `<span class="badge">${esc(nombreMedio(r.pago.medio))} −${fmt(r.pago.desc)}</span>` : ''}${r.promoSuper > 0 ? `<span class="badge">Ofertas −${fmt(r.promoSuper)}</span>` : ''}${r.pago.topeado ? '<span class="badge warn">llega al tope</span>' : ''}${r.faltan.length ? `<span class="badge warn">faltan ${r.faltan.length}</span>` : ''}</div></div>
-        <div class="tot"><b>${fmt(r.total)}</b><div class="meta">${i && !r.faltan.length && comp.length ? '+' + fmt(r.total - top.total) : '&nbsp;'}</div></div></div>
-      <div class="detail"><table><tr><th>Producto</th><th class="r">Cant.</th><th class="r">Unit.</th><th class="r">Total</th></tr>
-      ${r.lineas.map(l => l.p === null
-        ? `<tr><td class="miss">${esc(l.it.nombre)}</td><td class="r">${l.it.qty}</td><td class="r miss" colspan="2">${l.it.marcas.length ? 'no tiene esa marca' : 'no disponible'}</td></tr>`
-        : `<tr><td>${esc(l.it.tipo)}<div class="note">${esc(titulo(POR_EAN.get(l.ean)?.[1] || ''))}</div>${l.promo ? `<div class="promo">${esc(l.promo)}</div>` : ''}</td><td class="r">${l.it.qty}</td><td class="r">${fmt(l.unit)}${l.aplica && Math.round(l.unit) < Math.round(l.p) ? `<div class="tachado">${fmt(l.p)}</div>` : ''}</td><td class="r">${fmt(l.total)}</td></tr>`).join('')}
-      <tr><td colspan="3">Subtotal con ofertas del súper</td><td class="r">${fmt(r.sub)}</td></tr>
-      <tr><td colspan="3">${r.pago.desc ? esc(nombreMedio(r.pago.medio) + ' · ' + r.pago.nota) + (r.promoSuper > 0 ? '<div class="promo">se suma a las ofertas del súper</div>' : '') : 'Sin promo bancaria con tus medios'}</td><td class="r">−${fmt(r.pago.desc)}</td></tr>
-      <tr><td colspan="3"><b>Total a pagar</b></td><td class="r"><b>${fmt(r.total)}</b></td></tr></table>
-      <p style="margin:8px 0 0"><a href="${mapa(s)}" target="_blank" rel="noopener">Cómo llegar →</a></p></div></div>`;
-  });
-  if (res.length > visibles.length) h += `<button class="btn ghost" id="verTodos" style="width:100%">Ver las ${res.length} sucursales</button>`;
-  h += '</div>';
+  // otras opciones
+  const otras = res.filter(r => r !== top);
+  if (otras.length) {
+    const vis = estado.verTodos ? otras : otras.slice(0, 8);
+    h += `<section class="opciones"><h2>Otras opciones cerca</h2>${vis.map((r, i) => {
+      const s = r.store, open = estado.abiertos.has(s.id);
+      return `<div class="op"><button type="button" class="op-cab" data-id="${esc(s.id)}" aria-expanded="${open}">
+        <span class="op-n">${i + 2}</span>
+        <span><span class="nom">${esc(nombreSuc(s))}</span><span class="sub">${esc(titulo(s.dir))}, a ${kmTxt(r.dist)}</span>
+          <span class="pagos">${r.pago.desc ? `<span class="pill">${esc(nombreMedio(r.pago.medio))} −${fmt(r.pago.desc)}</span>` : ''}${r.faltan.length ? `<span class="pill aviso">Faltan ${r.faltan.length}</span>` : ''}</span></span>
+        <span class="tot">${fmt(r.total)}${!r.faltan.length && comp.length && r.total - top.total >= 1 ? `<small>+${fmt(r.total - top.total)}</small>` : ''}</span></button>
+        ${open ? `<div class="op-det">${lineasTicket(r)}<p><a class="como-llegar" href="${mapa(s)}" target="_blank" rel="noopener">${ICONO.ruta}Cómo llegar</a></p></div>` : ''}</div>`;
+    }).join('')}${otras.length > vis.length ? `<button class="btn sec mas" type="button" id="verTodos">Ver las ${otras.length} opciones</button>` : ''}</section>`;
+  }
   out.innerHTML = h;
-  out.querySelectorAll('.store .top').forEach(t => t.onclick = () => {
-    const el = t.parentElement, id = el.dataset.id;
-    estado.abiertos.has(id) ? estado.abiertos.delete(id) : estado.abiertos.add(id); el.classList.toggle('open');
-  });
-  $('#verTodos')?.addEventListener('click', () => { estado.verTodos = true; renderOut(); });
-  $('#sinMarcas')?.addEventListener('click', () => { estado.lista.forEach(it => it.marcas = []); render(); });
+  out.querySelectorAll('.op-cab').forEach(b => b.onclick = () => { const id = b.dataset.id; estado.abiertos.has(id) ? estado.abiertos.delete(id) : estado.abiertos.add(id); renderAhorro(); });
+  out.querySelectorAll('.barra[data-d]').forEach(b => b.onclick = () => { estado.dia = +b.dataset.d; renderAhorro(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
+  $('#verTodos')?.addEventListener('click', () => { estado.verTodos = true; renderAhorro(); });
+  $('#sinMarcas')?.addEventListener('click', () => { estado.lista.forEach(it => it.marcas = []); renderTodo(); toast('Ahora se elige la marca más barata en cada producto.'); });
+  pintarBarraTotal();
 }
 
-function render() { renderSide(); renderOut(); guardar(); }
+/* ------------------------------------------------------------ medios de pago */
+function renderMedios() {
+  const dc = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+  const hoyF = fechaDelDia(new Date().getDay());
+  const vigentes = id => PROMOS.promos.filter(p => p.medio === id && (!p.hasta || p.hasta >= hoyF));
+  const orden = [...PROMOS.medios].sort((a, b) => (vigentes(b.id).length > 0) - (vigentes(a.id).length > 0));
+  $('#medios').innerHTML = orden.map(m => {
+    const ps = vigentes(m.id);
+    const resumen = ps.slice(0, 3).map(p => `${nombreCad(p.cad)} ${p.dias.length === 7 ? 'todos los días' : p.dias.map(d => dc[d]).join(' y ')} ${Math.round(p.pct * 100)}%`).join(', ');
+    return `<label class="medio"><span class="txt"><b>${esc(m.nombre)}</b><small>${ps.length ? esc(resumen) + (ps.length > 3 ? ` y ${ps.length - 3} más` : '') : 'Sin promos cargadas este mes'}</small></span>
+      <span class="switch"><input type="checkbox" data-m="${m.id}" ${estado.medios.has(m.id) ? 'checked' : ''} aria-label="Tengo ${esc(m.nombre)}"><i></i></span></label>`;
+  }).join('');
+  $('#medios').onchange = e => { const id = e.target.dataset.m; e.target.checked ? estado.medios.add(id) : estado.medios.delete(id); guardar(); renderAhorro(); };
+}
+
+function renderTodo(conLista = true) {
+  if (conLista) renderLista();
+  else { pintarCuenta(); $('#lista').querySelectorAll('.marca-btn span').forEach((s, i) => s.textContent = textoMarcas(estado.lista[i])); }
+  renderAhorro(); guardar();
+}
 
 /* ------------------------------------------------------------ PWA */
 let eventoInstalar = null;
@@ -316,17 +421,17 @@ window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); evento
 $('#btnInstalar').onclick = async () => { if (!eventoInstalar) return; eventoInstalar.prompt(); await eventoInstalar.userChoice; eventoInstalar = null; $('#btnInstalar').hidden = true; };
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 const esIOS = /iphone|ipad|ipod/i.test(navigator.userAgent), standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
-if (esIOS && !standalone && !guardado.vioTipIOS) { setTimeout(() => toast('Para instalarla: tocá Compartir → “Agregar a inicio”.', 6000), 2500); guardado.vioTipIOS = true; guardar(); }
+if (esIOS && !standalone && !guardado.vioTipIOS) { setTimeout(() => toast('Para instalarla: tocá Compartir y después “Agregar a inicio”.', 6000), 2500); guardado.vioTipIOS = true; guardar(); }
 
 /* ------------------------------------------------------------ inicio */
 (async () => {
-  initControles();
+  initControles(); pintarUbic(); irA();
   try { await cargarBase(); }
-  catch (e) { $('#out').innerHTML = '<div class="card empty">No pude cargar los precios. Revisá tu conexión y volvé a intentar.</div>'; console.error(e); return; }
-  renderSide();
-  if (estado.ubic) { await cargarCeldas(); }
-  renderOut();
+  catch (e) { $('#resultado').innerHTML = vacio(ICONO.falta, 'No se pudieron cargar los precios', 'Revisá la conexión y volvé a abrir la app.'); console.error(e); return; }
+  renderMedios(); renderLista();
+  if (estado.ubic) await cargarCeldas();
+  renderAhorro();
   try { const p = await navigator.permissions?.query({ name: 'geolocation' }); if (p?.state === 'granted') pedirGPS(true); } catch {}
 })();
 
-export { estado, getFila };   // para pruebas
+export { estado, getFila };

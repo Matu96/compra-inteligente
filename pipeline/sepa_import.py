@@ -118,7 +118,11 @@ REGLAS_TIPO = [
     (r"\baceite\b.*\b(girasol|maiz|oliva|mezcla|canola|soja)\b", "Aceite de {1}"),
     (r"\bazucar\b", "Azúcar"),
     (r"\bharina\b.*\b(0000|000|leudante|integral|de maiz)\b", "Harina {1}"),
-    (r"\bcafe\b.*\b(molido|instantaneo|en grano|torrado|capsulas)\b", "Café {1}"),
+    (r"\bcafe\b.*\b(instantaneo|soluble)\b", "Café instantáneo"),
+    (r"\bcafe\b.*\b(capsulas?)\b", "Café en cápsulas"),
+    (r"\bcafe\b.*\b(en grano|granos?)\b", "Café en grano"),
+    (r"\bcafe\b.*\btorrado\b", "Café torrado"),
+    (r"\bcafe\b.*\b(molido|tostado|clasico|intenso|suave)\b", "Café molido"),
     (r"\b(gaseosa|bebida)\b.*\bcola\b|\bcoca.?cola\b|\bpepsi\b", "Gaseosa cola"),
     (r"\bgaseosa\b.*\b(lima limon|lima|limon|naranja|pomelo|tonica)\b", "Gaseosa {1}"),
     (r"\bagua\b.*\b(con gas|gasificada|soda)\b", "Agua con gas"),
@@ -176,11 +180,30 @@ def presentacion_canonica(presentacion):
         vis = f"{v} {u}"
     return f"{v}{u}", vis
 
+_TAM_DESC = re.compile(r"(\d+(?:[.,]\d+)?)\s*-?\s*(kg|kgs|kgm|kgr|gr|grs|grm|g|lt|lts|ltr|l|ml|mlt|cc|cm3)(?![a-z])")
+# palabras de envase/código que algunos comercios meten en la descripción y no hacen al producto
+_RUIDO = {"paq", "bsa", "fco", "pot", "lat", "cja", "bot", "bot", "nbe", "mp", "est", "sob", "doy", "pack", "pet", "tbt",
+          "env", "vid", "pvc", "brick", "sachet", "u", "un", "c", "x", "s", "unid", "uni", "saq", "gr", "kg", "lt", "ml"}
+
+def presentacion_de(nombre, presentacion):
+    """Tamaño del envase. La descripción manda si trae uno (algunos comercios, p. ej. Cencosud, informan la
+    cantidad mal: '1.000' por 1 kg o '0.500' sin unidad coherente). Si el campo da < 5 g/ml, también se descarta."""
+    hits = _TAM_DESC.findall(sin_tildes(nombre))
+    if hits:
+        v, u = hits[-1]
+        c = presentacion_canonica(f"{v} {u}")
+        if c[1] and not re.match(r"^[0-4](g|ml)$", c[0]):
+            return c
+    c = presentacion_canonica(presentacion)
+    if re.match(r"^[0-4](g|ml)$", c[0]):
+        return c[0], ""
+    return c
+
 def tipo_de(nombre, marca, presentacion):
     """'Yerba Mate Canarias Serena 1 Kg' + 'CANARIAS' + '1 kg' → ('yerba mate|1000g', 'Yerba mate 1 kg').
     Primero prueba las reglas curadas; si ninguna aplica, usa la descripción sin la marca ni cantidades."""
     s = " " + re.sub(r"[^a-z0-9%]+", " ", sin_tildes(nombre)) + " "
-    clave_pres, vis_pres = presentacion_canonica(presentacion)
+    clave_pres, vis_pres = presentacion_de(nombre, presentacion)
     for patron, plantilla in REGLAS_TIPO:
         m = re.search(patron, s)
         if m:
@@ -191,7 +214,12 @@ def tipo_de(nombre, marca, presentacion):
         if len(w) > 1:
             d = d.replace(" " + w + " ", " ")
     d = re.sub(r" \d+([.,]\d+)? ?" + _UNIDADES + r"(?= )", " ", d)
-    d = re.sub(r" x ?\d+(?= )", " ", d)
+    d = re.sub(r" x ?\d+\w*(?= )", " ", d)
+    d = re.sub(r" \d+(?= )", " ", d)
+    d = " ".join(w for w in d.split() if w not in _RUIDO and not re.fullmatch(r"\d+(gr?|kg|ml|lt?|cc)", w))
+    for w in re.split(r"[^a-z0-9]+", sin_tildes(marca)):    # marcas escritas pegadas o abreviadas ("C&Co")
+        if len(w) > 1:
+            d = re.sub(r"\b" + re.escape(w) + r"\b", " ", d)
     d = re.sub(r"\s+", " ", d).strip()
     visible = (d[:1].upper() + d[1:]) if d else nombre.strip()
     return f"{d}|{clave_pres}", f"{visible} {vis_pres}".strip()
