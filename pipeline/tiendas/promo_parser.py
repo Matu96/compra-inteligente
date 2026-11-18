@@ -20,11 +20,11 @@ las calcula aparte con promos.json), así que su precio_unitario_promo queda en 
 import re
 import unicodedata
 
-_FIDELIDAD = r"comunidad coto|mi carrefour|mi crf|club d[ií]a|club dia|jumbo ?(\+|mas|más|prime)|disco ?(\+|mas|más|prime)|vea ?(\+|mas|más)|" \
+_FIDELIDAD = r"comunidad|mi carrefour|mi crf|club d[ií]a|club dia|jumbo ?(\+|mas|más|prime)|disco ?(\+|mas|más|prime)|vea ?(\+|mas|más)|" \
              r"prime|socios?|tarjeta (coto|carrefour|cencosud|jumbo|disco)|cencosud score|beneficio exclusivo"
 _BANCARIA = r"banco|bna|naci[oó]n|provincia|cuenta dni|santander|galicia|bbva|macro|ciudad|hsbc|icbc|supervielle|patagonia|" \
             r"credicoop|comafi|columbia|hipotecario|visa|master|amex|american express|cabal|naranja|mercado ?pago|modo|" \
-            r"personal pay|uala|ual[aá]|brubank|lemon|prex|billetera|tarjeta|d[eé]bito|cr[eé]dito|cuotas|reintegro"
+            r"personal pay|uala|ual[aá]|brubank|lemon|prex|billetera|tarjeta|d[eé]bito|cr[eé]dito|cuotas|\\bcsi\\b|cencopay|reintegro"
 _VOLUMEN = r"\b\d+\s*x\s*\d+\b|\b(2|3|4)\s*(da|do|ra|ro|ta|to|°|º)?\s*(unidad|u\.?)?\s*al\s*\d+|segund[ao]|tercer[ao]|llevando|" \
            r"lleva\s*\d|comprando\s*\d|\bx\s*\d+\s*u|\d+\s*unidades|combo|pack"
 
@@ -63,6 +63,8 @@ def precio_unitario(texto, precio, tipo=None):
         return None
     t = _n(texto)
     tipo = tipo or clasificar(texto)
+    if t.startswith("hasta"):          # "Hasta 3x2 en Bebidas": campaña, el descuento real depende del producto
+        return None
     # "4x3", "3 x 2": llevás N y pagás M
     m = re.search(r"\b(\d+)\s*x\s*(\d+)\b", t)
     if m:
@@ -118,7 +120,8 @@ if __name__ == "__main__":
              ("2do al 50%", 1000, 750.0), ("2da unidad al 80%", 1000, 600.0), ("Segunda unidad al 50%", 1000, 750.0),
              ("70% en la 2da unidad", 1000, 650.0), ("3ra al 50%", 900, 750.0), ("Llevando 3, 20% off", 1000, 800.0),
              ("2 por $3.000", 2000, 1500.0), ("Precio Comunidad Coto $1.234,50", 1500, 1234.5),
-             ("20% dto. Mi Carrefour", 1000, 800.0), ("Banco Nación 25% los miércoles", 1000, None)]
+             ("20% dto. Mi Carrefour", 1000, 800.0), ("Banco Nación 25% los miércoles", 1000, None),
+             ("Hasta 3x2 en Bebidas", 1000, None), ("25% + 3 CSI con Cencopay", 1000, None), ("40%Dto", 3675, 2205.0)]
     mal = 0
     for t, p, esperado in casos:
         got = precio_unitario(t, p)
@@ -127,7 +130,7 @@ if __name__ == "__main__":
             print(f"✗ {t!r} con ${p}: {got} (esperado {esperado})")
     tipos = [("2x1", "volumen"), ("2da al 70%", "volumen"), ("20% dto. Mi Carrefour", "fidelidad"),
              ("Precio Comunidad Coto", "fidelidad"), ("Club Día 10%", "fidelidad"), ("Jumbo+ 15%", "fidelidad"),
-             ("Mercado Pago 20%", "bancaria"), ("Visa 6 cuotas sin interés", "bancaria"), ("25% off", "directa")]
+             ("Mercado Pago 20%", "bancaria"), ("Miembros Comunidad", "fidelidad"), ("25% + 3 CSI con Cencopay", "bancaria"), ("Visa 6 cuotas sin interés", "bancaria"), ("25% off", "directa")]
     for t, esperado in tipos:
         if clasificar(t) != esperado:
             mal += 1

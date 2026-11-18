@@ -24,11 +24,11 @@ PAGINA = 50
 TOPE = 2500            # VTEX corta en _from + 50 <= 2500
 PRECIO_MAX = 10_000_000
 
-# Colecciones (productClusters) que son campañas de promo y no simples secciones ("Almacén", "Todos los productos")
-_ES_PROMO = re.compile(r"\d+\s*%|\b\d+\s*x\s*\d+\b|\b(2|3)\s*(da|do|ra|ro)\b|segunda|llevando|off\b|dto|descuento|promo|oferta|"
-                       r"ahorro|precio|banco|visa|master|naranja|mercado ?pago|modo|cuenta dni|cuotas|reintegro|"
-                       r"comunidad|mi carrefour|club|jumbo ?\+|prime|exclusiv|liquidaci|hot ?sale|cyber|black|super ?precio",
-                       re.I)
+# Cucardas y colecciones que describen una promo concreta (no secciones como "Almacén" ni campañas internas)
+_ES_PROMO = re.compile(r"\d+\s*%|\b\d+\s*x\s*\d+\b|\b[234]\s*(da|do|ra|ro)\b|segunda unidad|llevando|cuotas|\bcsi\b|cencopay|"
+                       r"banco|visa|master|naranja|mercado ?pago|\bmodo\b|cuenta dni|comunidad|mi carrefour|club d[ií]a|"
+                       r"jumbo ?\+|disco ?\+|precio exclusivo", re.I)
+_BASURA = re.compile(r"_|mailing|carousel|ver m[aá]s|cup[oó]n|env[ií]o|colecci|cucarda|todas las ofertas|\bs\d{2}\b", re.I)
 
 
 def _limpio(d):
@@ -84,8 +84,7 @@ def _clusters(prod, precio):
             nombre = (nombre or "").strip()
             if not nombre or nombre.lower() in vistos:
                 continue
-            # los highlights son las cucardas: van todos; de las colecciones, solo las que son campañas
-            if fuente == "productClusters" and not _ES_PROMO.search(nombre):
+            if not _ES_PROMO.search(nombre) or _BASURA.search(nombre):
                 continue
             vistos.add(nombre.lower())
             out.append(promo(nombre, precio))
@@ -106,7 +105,10 @@ def parsear(tienda, base, prod, fecha):
         final, lista = _num(of.get("Price")), _num(of.get("ListPrice"))
         if not final or final <= 0:
             continue
-        lista = lista if lista and lista >= final else final
+        # Jumbo/Disco/Vea mandan a veces un ListPrice sin sentido (x80); entonces vale PriceWithoutDiscount
+        if not lista or lista < final or lista > final * 3:
+            sin = _num(of.get("PriceWithoutDiscount"))
+            lista = sin if sin and final <= sin <= final * 3 else final
         img = next((_imagen(i.get("imageUrl")) for i in item.get("images") or [] if i.get("imageUrl")), None)
         if not img or not img.startswith("https://"):
             continue

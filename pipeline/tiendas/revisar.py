@@ -32,3 +32,12 @@ if os.path.exists(m):
     con = [r for r in regs if any("dto" in k.lower() or "promo" in k.lower() or "descuento" in k.lower() for k in r["attributes"])]
     for r in con[:3]:
         print("   promo:", {k: v for k, v in r["attributes"].items() if any(w in k.lower() for w in ("dto", "promo", "descuento", "precio", "price"))})
+    textos = collections.Counter()
+    medios = collections.Counter()
+    for r in regs:
+        for d in json.loads((r["attributes"].get("product.dtoDescuentos") or ["[]"])[0] or "[]"):
+            textos[(d.get("textoDescuento"), d.get("precioDescTextoAdicional"))] += 1
+        for d in json.loads((r["attributes"].get("product.dtoDescuentosMediosPago") or ["[]"])[0] or "[]"):
+            medios[json.dumps(d, ensure_ascii=False)[:250]] += 1
+    print("   textoDescuento más comunes:", textos.most_common(25))
+    print("   medios de pago:", medios.most_common(8))

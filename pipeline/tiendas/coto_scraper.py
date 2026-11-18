@@ -82,6 +82,8 @@ def _precio(v):
     if isinstance(v, (int, float)):
         return float(v)
     s = str(v).strip()
+    if re.fullmatch(r"\$?\s*\d+(\.\d{1,6})?", s):          # "2205.00", "$2205.00": punto decimal
+        return float(s.lstrip("$ "))
     if "$" in s or "," in s:
         p = precio_explicito(s if "$" in s else "$" + s)
         if p:
@@ -97,45 +99,57 @@ def _slug(t):
     return t or "producto"
 
 
-def _descuentos(attrs, precio):
-    """product.dtoDescuentos (JSON en texto) y cucardas: Comunidad Coto, 2x1, 2da al 70 %, bancos…"""
-    promos = []
-    crudos = attrs.get("product.dtoDescuentos") or attrs.get("sku.dtoDescuentos") or []
-    if isinstance(crudos, str):
-        crudos = [crudos]
-    for c in crudos:
+def _json(v):
+    if isinstance(v, list):
+        v = v[0] if v else None
+    if isinstance(v, str) and v.strip().startswith(("[", "{")):
         try:
-            lista = json.loads(c) if isinstance(c, str) and c.strip().startswith(("[", "{")) else c
+            return json.loads(v)
         except json.JSONDecodeError:
-            lista = c
-        for d in lista if isinstance(lista, list) else [lista]:
-            if isinstance(d, str):
-                if d.strip():
-                    promos.append(promo(d, precio))
-                continue
-            if not isinstance(d, dict):
-                continue
-            texto = " ".join(str(d[k]).strip() for k in ("textoDescuento", "textoLlevando", "textoPrecioRegular", "descripcion", "nombre")
-                             if d.get(k) and str(d[k]).strip()) or ""
-            pu = _precio(d.get("precioDescuento") or d.get("precio"))
-            if not texto and pu:
-                texto = f"Precio promo ${pu:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            if texto:
-                p = promo(texto, precio, pu if pu and pu < precio else None)
-                promos.append(p)
-    # cucardas sueltas (atributos con 'promo', 'oferta', 'cucarda' o 'comunidad' en el nombre)
-    for k, v in attrs.items():
-        if re.search(r"cucarda|badge|promo|oferta|comunidad|textoPromo", k, re.I) and k not in ("product.dtoDescuentos",):
-            for x in v if isinstance(v, list) else [v]:
-                if isinstance(x, str) and 1 < len(x) < 140 and not x.strip().startswith(("[", "{", "http")) and not x.isdigit():
-                    promos.append(promo(x, precio))
+            return None
+    return v
+
+
+_SOLO_PCT = re.compile(r"^\s*\d{1,2}\s*%\s*(dto\.?|descuento|off)?\s*$", re.I)
+
+
+def _descuentos(attrs, lista):
+    """product.dtoDescuentos (ofertas del súper: 40%Dto, 2x1, 2do al 70 %, Comunidad Coto) y
+    product.dtoDescuentosMediosPago (bancos y billeteras). Devuelve (promos, precio directo o None)."""
+    promos, directo = [], None
+    for d in _json(attrs.get("product.dtoDescuentos")) or []:
+        if not isinstance(d, dict):
+            continue
+        texto = " ".join(x for x in (str(d.get("textoDescuento") or "").strip(), str(d.get("precioDescTextoAdicional") or "").strip()) if x)
+        pu = _precio(d.get("precioDesc")) or _precio(d.get("precioDescuento"))
+        if not texto:
+            continue
+        p = promo(texto, lista, pu if pu and pu < lista else None)
+        if p["tipo"] == "directa" and _SOLO_PCT.match(texto) and p["precio_unitario_promo"]:
+            # "40%Dto" sin condición: es el precio de góndola de hoy
+            directo = min(directo or 1e18, p["precio_unitario_promo"])
+        if d.get("comentarios") and "no acumulable" in str(d["comentarios"]).lower():
+            p["descripcion"] += " (no acumulable)"
+        promos.append(p)
+    for d in _json(attrs.get("product.dtoDescuentosMediosPago")) or []:
+        if isinstance(d, dict):
+            texto = " ".join(str(v).strip() for k, v in d.items()
+                             if isinstance(v, str) and v.strip() and re.search(r"texto|desc|nombre|medio|banco|tarjeta|leyenda", k, re.I)
+                             and not v.strip().startswith(("http", "{", "[")) and not re.fullmatch(r"[\d.,\s$]+", v.strip()))
+        else:
+            texto = str(d)
+        if texto.strip():
+            p = promo(texto, lista)
+            p["tipo"] = "bancaria"
+            p["precio_unitario_promo"] = None
+            promos.append(p)
     unicas, vistos = [], set()
     for p in promos:
         k = p["descripcion"].lower()
         if k and k not in vistos:
             vistos.add(k)
             unicas.append(p)
-    return unicas
+    return unicas, directo
 
 
 def parsear(reg, fecha):
@@ -145,17 +159,20 @@ def parsear(reg, fecha):
     if not sku or not nombre:
         return None
     sku = str(sku).strip()
-    final = _precio(_uno(a, "sku.activePrice", "sku.salePrice", "product.activePrice", "sku.price"))
-    lista = _precio(_uno(a, "sku.referencePrice", "sku.listPrice", "product.referencePrice", "sku.activePrice"))
-    if not final or final <= 0:
+    # sku.activePrice = precio de góndola; sku.referencePrice es por kilo/litro (no sirve como lista)
+    dto_precio = _json(a.get("sku.dtoPrice")) or {}
+    lista = _precio(dto_precio.get("precioLista") if isinstance(dto_precio, dict) else None) or _precio(_uno(a, "sku.activePrice", "product.activePrice"))
+    if not lista or lista <= 0:
         return None
-    if not lista or lista < final:
-        lista = final
+    promos, directo = _descuentos(a, lista)
+    final = directo if directo and directo < lista else lista
     disp = _uno(a, "product.sDisp_" + SUCURSAL, "sku.sDisp_" + SUCURSAL, "sku.stockAvailable")
     if disp is not None and str(disp).strip().lower() in ("0", "false", "no"):
         return None
     img = _uno(a, "product.mediumImage.url", "product.largeImage.url", "sku.mediumImage.url", "product.smallImage.url",
                "product.imagen", "sku.imagen")
+    if img:
+        img = img.replace("/fotos/medium/", "/fotos/large/").replace("/fotos/small/", "/fotos/large/")
     if img and img.startswith("//"):
         img = "https:" + img
     elif img and img.startswith("/"):
@@ -166,15 +183,10 @@ def parsear(reg, fecha):
     ean = str(ean).strip() if ean else None
     if ean and not re.fullmatch(r"\d{6,14}", ean):
         ean = None
-    promos = _descuentos(a, final)
     desc = round((1 - final / lista) * 100) if lista > final else 0
-    if desc and not any(p["tipo"] == "directa" for p in promos):
-        promos.insert(0, {"tipo": "directa", "descripcion": f"{desc}% off", "precio_unitario_promo": final})
-    url = _uno(a, "product.url", "sku.url")
-    if url and url.startswith("/"):
-        url = BASE + url
-    if not url or not url.startswith("https://"):
-        url = f"{BASE}/sitios/cdigi/productos/{_slug(nombre)}/_/R-{sku}-{sku}-{SUCURSAL}"
+    num = re.sub(r"\D", "", sku)
+    rid = _uno(a, "record.id") or f"{num}-{num}-{SUCURSAL}"
+    url = f"{BASE}/sitios/cdigi/productos/{_slug(nombre)}/_/R-{rid}"
     return {
         "tienda": "coto", "ean": ean, "sku_tienda": sku, "nombre": str(nombre).strip(),
         "marca": (str(_uno(a, "product.brand", "product.MARCA", "product.marca", "sku.brand") or "").strip() or None),
