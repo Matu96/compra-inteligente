@@ -13,7 +13,12 @@ a = ap.parse_args()
 toks = sin_tildes(a.texto).split()
 
 print(f"== SEPA crudo: '{a.texto}' en {a.cadena or 'todas'} a <{a.radio} km ==")
+from sepa_import import tipo_de, num
+cat0 = json.load(open(os.path.join(a.data, "catalogo.json")))
+en_cat = {p[0] for p in cat0["productos"]}
+tipos_cat = set(cat0["tipos"])
 crudo = {}
+n_com = n_suc = n_fil = 0
 for nombre, zf in iterar_comercios(a.sepa):
     fc, fs, fp = buscar(zf, "comercio.csv"), buscar(zf, "sucursales.csv"), buscar(zf, "productos.csv")
     if not (fc and fs and fp): continue
@@ -25,18 +30,26 @@ for nombre, zf in iterar_comercios(a.sepa):
         except Exception: continue
         if d <= a.radio:
             sucs[(s["id_comercio"], s["id_bandera"], s["id_sucursal"])] = (d, s.get("sucursales_calle", "") + " " + s.get("sucursales_numero", ""))
+    n_com += 1
     if not sucs: continue
+    n_suc += len(sucs)
     for p in leer_csv(zf, fp):
         k = (p.get("id_comercio"), p.get("id_bandera"), p.get("id_sucursal"))
         if k not in sucs: continue
         txt = sin_tildes(p.get("productos_descripcion", "") + " " + p.get("productos_marca", ""))
         if all(t in txt for t in toks):
             d, dirr = sucs[k]
-            crudo["-".join(k)] = p
-            print(f"{d:4.1f} km {band.get(k[:2])} {dirr[:28]:28} | {p.get('id_producto')} {p.get('productos_descripcion')[:40]:40} "
-                  f"| lista={p.get('productos_precio_lista')} ref={p.get('productos_precio_referencia')} "
-                  f"promo1={p.get('productos_precio_unitario_promo1')} '{p.get('productos_leyenda_promo1')}' "
-                  f"promo2={p.get('productos_precio_unitario_promo2')} '{p.get('productos_leyenda_promo2')}'")
+            n_fil += 1
+            ean = p.get("id_producto", "").strip().lstrip("0")
+            cant = num(p.get("productos_cantidad_presentacion", ""))
+            pres = f"{cant:g} {p.get('productos_unidad_medida_presentacion','')}".strip() if cant else p.get("productos_unidad_medida_presentacion", "")
+            _, tn = tipo_de(p.get("productos_descripcion", ""), p.get("productos_marca", ""), pres)
+            motivo = "EN CATÁLOGO" if ean in en_cat else ("código interno (productos_ean=0)" if p.get("productos_ean", "1").strip() != "1"
+                     else ("tipo en catálogo pero EAN no (tope por zona)" if tn in tipos_cat else "tipo NO entró al catálogo"))
+            print(f"{d:4.1f} km {band.get(k[:2])[:18]:18} {dirr[:22]:22} | {ean} {p.get('productos_descripcion')[:42]:42} "
+                  f"| marca={p.get('productos_marca')} | pres='{pres}' | tipo='{tn}' | lista={p.get('productos_precio_lista')} "
+                  f"promo1={p.get('productos_precio_unitario_promo1')} '{(p.get('productos_leyenda_promo1') or '')[:30]}' | {motivo}")
+print(f"(comercios recorridos: {n_com}, sucursales en radio: {n_suc}, filas que coinciden: {n_fil})")
 
 print("\n== Lo que ve la app ==")
 idx = json.load(open(os.path.join(a.data, "index.json")))
