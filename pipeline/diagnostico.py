@@ -52,6 +52,30 @@ for nombre, zf in iterar_comercios(a.sepa):
                   f"promo1={p.get('productos_precio_unitario_promo1')} '{(p.get('productos_leyenda_promo1') or '')[:30]}' | {motivo}")
 print(f"(comercios recorridos: {n_com}, sucursales en radio: {n_suc}, filas que coinciden: {n_fil})")
 
+print(f"\n== Todo el país: '{a.texto}' (agrupado por producto) ==")
+from collections import Counter
+grupos, ejemplo_claves = Counter(), None
+for nombre, zf in iterar_comercios(a.sepa):
+    fc, fs, fp = buscar(zf, "comercio.csv"), buscar(zf, "sucursales.csv"), buscar(zf, "productos.csv")
+    if not (fc and fs and fp): continue
+    band = {(c.get("id_comercio"), c.get("id_bandera")): c.get("comercio_bandera_nombre", "") for c in leer_csv(zf, fc)}
+    if ejemplo_claves is None:
+        s0 = next(iter(leer_csv(zf, fs)), {}); p0 = next(iter(leer_csv(zf, fp)), {})
+        ejemplo_claves = (list(s0.items())[:3], list(p0.items())[:4])
+    for p in leer_csv(zf, fp):
+        txt = sin_tildes(p.get("productos_descripcion", "") + " " + p.get("productos_marca", ""))
+        if not all(t in txt for t in toks): continue
+        ean = p.get("id_producto", "").strip().lstrip("0")
+        cant = num(p.get("productos_cantidad_presentacion", ""))
+        pres = f"{cant:g} {p.get('productos_unidad_medida_presentacion','')}".strip() if cant else p.get("productos_unidad_medida_presentacion", "")
+        _, tn = tipo_de(p.get("productos_descripcion", ""), p.get("productos_marca", ""), pres)
+        motivo = "EN CATÁLOGO" if ean in en_cat else ("código interno (productos_ean=0)" if p.get("productos_ean", "1").strip() != "1"
+                 else ("tipo en catálogo, EAN no" if tn in tipos_cat else "tipo NO entró"))
+        grupos[(clave_cadena(band.get((p.get("id_comercio"), p.get("id_bandera")), "")), ean, p.get("productos_descripcion", "")[:45], p.get("productos_marca", ""), tn, motivo)] += 1
+for (cad, ean, d, m, tn, mo), n in sorted(grupos.items(), key=lambda x: -x[1])[:60]:
+    print(f"{n:5} suc | {cad:12} | {ean:14} | {d:45} | {m:18} | tipo='{tn}' | {mo}")
+print("claves de ejemplo (sucursales, productos):", ejemplo_claves)
+
 print("\n== Lo que ve la app ==")
 idx = json.load(open(os.path.join(a.data, "index.json")))
 cat = json.load(open(os.path.join(a.data, "catalogo.json")))
