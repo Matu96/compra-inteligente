@@ -52,7 +52,7 @@
     },
     {
       "id": "naranjax",
-      "nombre": "Naranja X"
+      "nombre": "Naranja X (plan Inicial)"
     },
     {
       "id": "columbia",
@@ -61,6 +61,34 @@
     {
       "id": "ciudadania",
       "nombre": "Ciudadanía Porteña"
+    },
+    {
+      "id": "naranjax_turbo",
+      "nombre": "Naranja X (plan Turbo)"
+    },
+    {
+      "id": "anses",
+      "nombre": "Beneficios ANSES"
+    },
+    {
+      "id": "comafi",
+      "nombre": "Comafi (MODO)"
+    },
+    {
+      "id": "supervielle",
+      "nombre": "Supervielle (MODO)"
+    },
+    {
+      "id": "ciudad",
+      "nombre": "Banco Ciudad (MODO)"
+    },
+    {
+      "id": "icbc",
+      "nombre": "ICBC"
+    },
+    {
+      "id": "comunidadcoto",
+      "nombre": "Comunidad Coto (socio)"
     }
   ],
   "promos": [
@@ -413,6 +441,484 @@
       },
       "nota": "Sáb y dom 20% con QR, sin tope, en sucursales. No se suma a las ofertas; excluye carnes, alcohol, Coca-Cola y electro",
       "fuente": "https://calcularsueldo.com.ar/?p=16359"
+    },
+    {
+      "cad": "coto",
+      "medio": "ciudadania",
+      "dias": [
+        2,
+        4
+      ],
+      "pct": 0.15,
+      "tope": null,
+      "min": 0,
+      "desde": "2026-11-01",
+      "hasta": "2026-11-30",
+      "excluye": {
+        "palabras": [
+          "\\b(carnes?|novillo|novillito|ternera|vacuna|asado|vacio|matambre|nalga|cuadrada|peceto|bife|osobuco|falda|entrana|roast beef|carne picada|picada especial|menudencias?|pollo|pechugas?|suprema|muslos?|cerdo|bondiola|pechito|carre de cerdo|chorizos?|morcillas?|hamburguesas?)\\b",
+          "\\b(vinos?|espumantes?|champagne|champana|sidras?|cervezas?|fernet|whisky|whiskey|vodka|gin|ron|licor|aperitivo|vermut|vermouth|tequila|brandy|cognac|grappa|bebida alcoholica)\\b",
+          "\\b(televisor|smart tv|heladera|freezer|lavarropas|secarropas|microondas|aire acondicionado|ventilador|calefactor|licuadora|batidora|cafetera electrica|pava electrica|tostadora|plancha electrica|aspiradora|notebook|celular|tablet|horno electrico|anafe)\\b",
+          "\\b(neumaticos?|cubiertas?|bicicletas?|rodados?|monopatin)\\b"
+        ],
+        "marcas": [
+          "coca cola",
+          "coca-cola",
+          "sprite",
+          "fanta",
+          "aquarius",
+          "schweppes",
+          "powerade",
+          "cepita",
+          "del valle",
+          "ades",
+          "kin"
+        ],
+        "salvo": [
+          "\\b(caldo|sopa|saborizad\\w*|sabor a|alimento para|perros?|gatos?|pate|snacks?|galletitas?|vinagre|aceto|salsa|condimento|cuchillo|tabla)\\b"
+        ]
+      },
+      "nota": "Mar y jue 15%, programa Ciudadanía Porteña, sin tope. Aplican exclusiones",
+      "fuente": "coto.com.ar (promociones en sucursales, captura del 18/11/2026)"
+    },
+    {
+      "cad": "coto",
+      "medio": "anses",
+      "dias": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "pct": 0.1,
+      "tope": null,
+      "min": 0,
+      "desde": "2026-11-01",
+      "hasta": "2026-11-30",
+      "excluye": {
+        "palabras": [
+          "\\b(carnes?|novillo|novillito|ternera|vacuna|asado|vacio|matambre|nalga|cuadrada|peceto|bife|osobuco|falda|entrana|roast beef|carne picada|picada especial|menudencias?|pollo|pechugas?|suprema|muslos?|cerdo|bondiola|pechito|carre de cerdo|chorizos?|morcillas?|hamburguesas?)\\b",
+          "\\b(vinos?|espumantes?|champagne|champana|sidras?|cervezas?|fernet|whisky|whiskey|vodka|gin|ron|licor|aperitivo|vermut|vermouth|tequila|brandy|cognac|grappa|bebida alcoholica)\\b",
+          "\\b(televisor|smart tv|heladera|freezer|lavarropas|secarropas|microondas|aire acondicionado|ventilador|calefactor|licuadora|batidora|cafetera electrica|pava electrica|tostadora|plancha electrica|aspiradora|notebook|celular|tablet|horno electrico|anafe)\\b",
+          "\\b(neumaticos?|cubiertas?|bicicletas?|rodados?|monopatin)\\b"
+        ],
+        "marcas": [
+          "coca cola",
+          "coca-cola",
+          "sprite",
+          "fanta",
+          "aquarius",
+          "schweppes",
+          "powerade",
+          "cepita",
+          "del valle",
+          "ades",
+          "kin"
+        ],
+        "salvo": [
+          "\\b(caldo|sopa|saborizad\\w*|sabor a|alimento para|perros?|gatos?|pate|snacks?|galletitas?|vinagre|aceto|salsa|condimento|cuchillo|tabla)\\b"
+        ]
+      },
+      "nota": "Lun a jue 10% con tarjeta de crédito o débito, sin tope. Aplican exclusiones",
+      "fuente": "coto.com.ar (promociones en sucursales, captura del 18/11/2026)"
+    },
+    {
+      "cad": "coto",
+      "medio": "naranjax",
+      "dias": [
+        2
+      ],
+      "pct": 0.2,
+      "tope": 3000,
+      "min": 0,
+      "desde": "2026-11-01",
+      "hasta": "2026-11-30",
+      "excluye": {
+        "palabras": [
+          "\\b(carnes?|novillo|novillito|ternera|vacuna|asado|vacio|matambre|nalga|cuadrada|peceto|bife|osobuco|falda|entrana|roast beef|carne picada|picada especial|menudencias?|pollo|pechugas?|suprema|muslos?|cerdo|bondiola|pechito|carre de cerdo|chorizos?|morcillas?|hamburguesas?)\\b",
+          "\\b(vinos?|espumantes?|champagne|champana|sidras?|cervezas?|fernet|whisky|whiskey|vodka|gin|ron|licor|aperitivo|vermut|vermouth|tequila|brandy|cognac|grappa|bebida alcoholica)\\b",
+          "\\b(televisor|smart tv|heladera|freezer|lavarropas|secarropas|microondas|aire acondicionado|ventilador|calefactor|licuadora|batidora|cafetera electrica|pava electrica|tostadora|plancha electrica|aspiradora|notebook|celular|tablet|horno electrico|anafe)\\b",
+          "\\b(neumaticos?|cubiertas?|bicicletas?|rodados?|monopatin)\\b"
+        ],
+        "marcas": [
+          "coca cola",
+          "coca-cola",
+          "sprite",
+          "fanta",
+          "aquarius",
+          "schweppes",
+          "powerade",
+          "cepita",
+          "del valle",
+          "ades",
+          "kin"
+        ],
+        "salvo": [
+          "\\b(caldo|sopa|saborizad\\w*|sabor a|alimento para|perros?|gatos?|pate|snacks?|galletitas?|vinagre|aceto|salsa|condimento|cuchillo|tabla)\\b"
+        ]
+      },
+      "nota": "Martes 20% con Naranja X, tope $3.000/semana (plan Inicial)",
+      "fuente": "coto.com.ar (promociones en sucursales, captura del 18/11/2026)"
+    },
+    {
+      "cad": "coto",
+      "medio": "naranjax_turbo",
+      "dias": [
+        2
+      ],
+      "pct": 0.25,
+      "tope": 9500,
+      "min": 0,
+      "desde": "2026-11-01",
+      "hasta": "2026-11-30",
+      "excluye": {
+        "palabras": [
+          "\\b(carnes?|novillo|novillito|ternera|vacuna|asado|vacio|matambre|nalga|cuadrada|peceto|bife|osobuco|falda|entrana|roast beef|carne picada|picada especial|menudencias?|pollo|pechugas?|suprema|muslos?|cerdo|bondiola|pechito|carre de cerdo|chorizos?|morcillas?|hamburguesas?)\\b",
+          "\\b(vinos?|espumantes?|champagne|champana|sidras?|cervezas?|fernet|whisky|whiskey|vodka|gin|ron|licor|aperitivo|vermut|vermouth|tequila|brandy|cognac|grappa|bebida alcoholica)\\b",
+          "\\b(televisor|smart tv|heladera|freezer|lavarropas|secarropas|microondas|aire acondicionado|ventilador|calefactor|licuadora|batidora|cafetera electrica|pava electrica|tostadora|plancha electrica|aspiradora|notebook|celular|tablet|horno electrico|anafe)\\b",
+          "\\b(neumaticos?|cubiertas?|bicicletas?|rodados?|monopatin)\\b"
+        ],
+        "marcas": [
+          "coca cola",
+          "coca-cola",
+          "sprite",
+          "fanta",
+          "aquarius",
+          "schweppes",
+          "powerade",
+          "cepita",
+          "del valle",
+          "ades",
+          "kin"
+        ],
+        "salvo": [
+          "\\b(caldo|sopa|saborizad\\w*|sabor a|alimento para|perros?|gatos?|pate|snacks?|galletitas?|vinagre|aceto|salsa|condimento|cuchillo|tabla)\\b"
+        ]
+      },
+      "nota": "Martes 25% con Naranja X, tope $9.500/semana (plan Turbo)",
+      "fuente": "coto.com.ar (promociones en sucursales, captura del 18/11/2026)"
+    },
+    {
+      "cad": "coto",
+      "medio": "comafi",
+      "dias": [
+        2
+      ],
+      "pct": 0.35,
+      "tope": null,
+      "min": 0,
+      "desde": "2026-11-01",
+      "hasta": "2026-11-30",
+      "excluye": {
+        "palabras": [
+          "\\b(carnes?|novillo|novillito|ternera|vacuna|asado|vacio|matambre|nalga|cuadrada|peceto|bife|osobuco|falda|entrana|roast beef|carne picada|picada especial|menudencias?|pollo|pechugas?|suprema|muslos?|cerdo|bondiola|pechito|carre de cerdo|chorizos?|morcillas?|hamburguesas?)\\b",
+          "\\b(vinos?|espumantes?|champagne|champana|sidras?|cervezas?|fernet|whisky|whiskey|vodka|gin|ron|licor|aperitivo|vermut|vermouth|tequila|brandy|cognac|grappa|bebida alcoholica)\\b",
+          "\\b(televisor|smart tv|heladera|freezer|lavarropas|secarropas|microondas|aire acondicionado|ventilador|calefactor|licuadora|batidora|cafetera electrica|pava electrica|tostadora|plancha electrica|aspiradora|notebook|celular|tablet|horno electrico|anafe)\\b",
+          "\\b(neumaticos?|cubiertas?|bicicletas?|rodados?|monopatin)\\b"
+        ],
+        "marcas": [
+          "coca cola",
+          "coca-cola",
+          "sprite",
+          "fanta",
+          "aquarius",
+          "schweppes",
+          "powerade",
+          "cepita",
+          "del valle",
+          "ades",
+          "kin"
+        ],
+        "salvo": [
+          "\\b(caldo|sopa|saborizad\\w*|sabor a|alimento para|perros?|gatos?|pate|snacks?|galletitas?|vinagre|aceto|salsa|condimento|cuchillo|tabla)\\b"
+        ]
+      },
+      "nota": "Martes 35% con MODO desde la app de Comafi, sin tope. Solo productos sin oferta",
+      "fuente": "coto.com.ar (promociones en sucursales, captura del 18/11/2026)",
+      "acumulable": false
+    },
+    {
+      "cad": "coto",
+      "medio": "columbia",
+      "dias": [
+        2
+      ],
+      "pct": 0.3,
+      "tope": null,
+      "min": 0,
+      "desde": "2026-11-01",
+      "hasta": "2026-11-30",
+      "excluye": {
+        "palabras": [
+          "\\b(carnes?|novillo|novillito|ternera|vacuna|asado|vacio|matambre|nalga|cuadrada|peceto|bife|osobuco|falda|entrana|roast beef|carne picada|picada especial|menudencias?|pollo|pechugas?|suprema|muslos?|cerdo|bondiola|pechito|carre de cerdo|chorizos?|morcillas?|hamburguesas?)\\b",
+          "\\b(vinos?|espumantes?|champagne|champana|sidras?|cervezas?|fernet|whisky|whiskey|vodka|gin|ron|licor|aperitivo|vermut|vermouth|tequila|brandy|cognac|grappa|bebida alcoholica)\\b",
+          "\\b(televisor|smart tv|heladera|freezer|lavarropas|secarropas|microondas|aire acondicionado|ventilador|calefactor|licuadora|batidora|cafetera electrica|pava electrica|tostadora|plancha electrica|aspiradora|notebook|celular|tablet|horno electrico|anafe)\\b",
+          "\\b(neumaticos?|cubiertas?|bicicletas?|rodados?|monopatin)\\b"
+        ],
+        "marcas": [
+          "coca cola",
+          "coca-cola",
+          "sprite",
+          "fanta",
+          "aquarius",
+          "schweppes",
+          "powerade",
+          "cepita",
+          "del valle",
+          "ades",
+          "kin"
+        ],
+        "salvo": [
+          "\\b(caldo|sopa|saborizad\\w*|sabor a|alimento para|perros?|gatos?|pate|snacks?|galletitas?|vinagre|aceto|salsa|condimento|cuchillo|tabla)\\b"
+        ]
+      },
+      "nota": "Martes 30% con MODO desde la app de Columbia, sin tope. Solo productos sin oferta",
+      "fuente": "coto.com.ar (promociones en sucursales, captura del 18/11/2026)",
+      "acumulable": false
+    },
+    {
+      "cad": "coto",
+      "medio": "columbia",
+      "dias": [
+        4
+      ],
+      "pct": 0.3,
+      "tope": null,
+      "min": 0,
+      "desde": "2026-11-01",
+      "hasta": "2026-11-30",
+      "excluye": {
+        "palabras": [
+          "\\b(carnes?|novillo|novillito|ternera|vacuna|asado|vacio|matambre|nalga|cuadrada|peceto|bife|osobuco|falda|entrana|roast beef|carne picada|picada especial|menudencias?|pollo|pechugas?|suprema|muslos?|cerdo|bondiola|pechito|carre de cerdo|chorizos?|morcillas?|hamburguesas?)\\b",
+          "\\b(vinos?|espumantes?|champagne|champana|sidras?|cervezas?|fernet|whisky|whiskey|vodka|gin|ron|licor|aperitivo|vermut|vermouth|tequila|brandy|cognac|grappa|bebida alcoholica)\\b",
+          "\\b(televisor|smart tv|heladera|freezer|lavarropas|secarropas|microondas|aire acondicionado|ventilador|calefactor|licuadora|batidora|cafetera electrica|pava electrica|tostadora|plancha electrica|aspiradora|notebook|celular|tablet|horno electrico|anafe)\\b",
+          "\\b(neumaticos?|cubiertas?|bicicletas?|rodados?|monopatin)\\b"
+        ],
+        "marcas": [
+          "coca cola",
+          "coca-cola",
+          "sprite",
+          "fanta",
+          "aquarius",
+          "schweppes",
+          "powerade",
+          "cepita",
+          "del valle",
+          "ades",
+          "kin"
+        ],
+        "salvo": [
+          "\\b(caldo|sopa|saborizad\\w*|sabor a|alimento para|perros?|gatos?|pate|snacks?|galletitas?|vinagre|aceto|salsa|condimento|cuchillo|tabla)\\b"
+        ]
+      },
+      "nota": "Jueves 30% con crédito Visa o Mastercard Columbia, sin tope. Aplican exclusiones",
+      "fuente": "coto.com.ar (promociones en sucursales, captura del 18/11/2026)"
+    },
+    {
+      "cad": "coto",
+      "medio": "supervielle",
+      "dias": [
+        2
+      ],
+      "pct": 0.3,
+      "tope": null,
+      "min": 0,
+      "desde": "2026-11-01",
+      "hasta": "2026-11-30",
+      "excluye": {
+        "palabras": [
+          "\\b(carnes?|novillo|novillito|ternera|vacuna|asado|vacio|matambre|nalga|cuadrada|peceto|bife|osobuco|falda|entrana|roast beef|carne picada|picada especial|menudencias?|pollo|pechugas?|suprema|muslos?|cerdo|bondiola|pechito|carre de cerdo|chorizos?|morcillas?|hamburguesas?)\\b",
+          "\\b(vinos?|espumantes?|champagne|champana|sidras?|cervezas?|fernet|whisky|whiskey|vodka|gin|ron|licor|aperitivo|vermut|vermouth|tequila|brandy|cognac|grappa|bebida alcoholica)\\b",
+          "\\b(televisor|smart tv|heladera|freezer|lavarropas|secarropas|microondas|aire acondicionado|ventilador|calefactor|licuadora|batidora|cafetera electrica|pava electrica|tostadora|plancha electrica|aspiradora|notebook|celular|tablet|horno electrico|anafe)\\b",
+          "\\b(neumaticos?|cubiertas?|bicicletas?|rodados?|monopatin)\\b"
+        ],
+        "marcas": [
+          "coca cola",
+          "coca-cola",
+          "sprite",
+          "fanta",
+          "aquarius",
+          "schweppes",
+          "powerade",
+          "cepita",
+          "del valle",
+          "ades",
+          "kin"
+        ],
+        "salvo": [
+          "\\b(caldo|sopa|saborizad\\w*|sabor a|alimento para|perros?|gatos?|pate|snacks?|galletitas?|vinagre|aceto|salsa|condimento|cuchillo|tabla)\\b"
+        ]
+      },
+      "nota": "Martes 30% con MODO desde la app de Supervielle, sin tope. Solo productos sin oferta",
+      "fuente": "coto.com.ar (promociones en sucursales, captura del 18/11/2026)",
+      "acumulable": false
+    },
+    {
+      "cad": "coto",
+      "medio": "modo",
+      "dias": [
+        2
+      ],
+      "pct": 0.25,
+      "tope": null,
+      "min": 0,
+      "desde": "2026-11-01",
+      "hasta": "2026-11-30",
+      "excluye": {
+        "palabras": [
+          "\\b(carnes?|novillo|novillito|ternera|vacuna|asado|vacio|matambre|nalga|cuadrada|peceto|bife|osobuco|falda|entrana|roast beef|carne picada|picada especial|menudencias?|pollo|pechugas?|suprema|muslos?|cerdo|bondiola|pechito|carre de cerdo|chorizos?|morcillas?|hamburguesas?)\\b",
+          "\\b(vinos?|espumantes?|champagne|champana|sidras?|cervezas?|fernet|whisky|whiskey|vodka|gin|ron|licor|aperitivo|vermut|vermouth|tequila|brandy|cognac|grappa|bebida alcoholica)\\b",
+          "\\b(televisor|smart tv|heladera|freezer|lavarropas|secarropas|microondas|aire acondicionado|ventilador|calefactor|licuadora|batidora|cafetera electrica|pava electrica|tostadora|plancha electrica|aspiradora|notebook|celular|tablet|horno electrico|anafe)\\b",
+          "\\b(neumaticos?|cubiertas?|bicicletas?|rodados?|monopatin)\\b"
+        ],
+        "marcas": [
+          "coca cola",
+          "coca-cola",
+          "sprite",
+          "fanta",
+          "aquarius",
+          "schweppes",
+          "powerade",
+          "cepita",
+          "del valle",
+          "ades",
+          "kin"
+        ],
+        "salvo": [
+          "\\b(caldo|sopa|saborizad\\w*|sabor a|alimento para|perros?|gatos?|pate|snacks?|galletitas?|vinagre|aceto|salsa|condimento|cuchillo|tabla)\\b"
+        ]
+      },
+      "nota": "Martes 25% con QR MODO o la app de tu banco, sin tope. Solo productos sin oferta",
+      "fuente": "coto.com.ar (promociones en sucursales, captura del 18/11/2026)",
+      "acumulable": false
+    },
+    {
+      "cad": "coto",
+      "medio": "ciudad",
+      "dias": [
+        1
+      ],
+      "pct": 0.25,
+      "tope": 30000,
+      "min": 0,
+      "desde": "2026-11-01",
+      "hasta": "2026-11-30",
+      "excluye": {
+        "palabras": [
+          "\\b(carnes?|novillo|novillito|ternera|vacuna|asado|vacio|matambre|nalga|cuadrada|peceto|bife|osobuco|falda|entrana|roast beef|carne picada|picada especial|menudencias?|pollo|pechugas?|suprema|muslos?|cerdo|bondiola|pechito|carre de cerdo|chorizos?|morcillas?|hamburguesas?)\\b",
+          "\\b(vinos?|espumantes?|champagne|champana|sidras?|cervezas?|fernet|whisky|whiskey|vodka|gin|ron|licor|aperitivo|vermut|vermouth|tequila|brandy|cognac|grappa|bebida alcoholica)\\b",
+          "\\b(televisor|smart tv|heladera|freezer|lavarropas|secarropas|microondas|aire acondicionado|ventilador|calefactor|licuadora|batidora|cafetera electrica|pava electrica|tostadora|plancha electrica|aspiradora|notebook|celular|tablet|horno electrico|anafe)\\b",
+          "\\b(neumaticos?|cubiertas?|bicicletas?|rodados?|monopatin)\\b"
+        ],
+        "marcas": [
+          "coca cola",
+          "coca-cola",
+          "sprite",
+          "fanta",
+          "aquarius",
+          "schweppes",
+          "powerade",
+          "cepita",
+          "del valle",
+          "ades",
+          "kin"
+        ],
+        "salvo": [
+          "\\b(caldo|sopa|saborizad\\w*|sabor a|alimento para|perros?|gatos?|pate|snacks?|galletitas?|vinagre|aceto|salsa|condimento|cuchillo|tabla)\\b"
+        ]
+      },
+      "nota": "Lunes 25% con MODO desde la app de Banco Ciudad (crédito), tope $30.000",
+      "fuente": "coto.com.ar (promociones en sucursales, captura del 18/11/2026)"
+    },
+    {
+      "cad": "coto",
+      "medio": "icbc",
+      "dias": [
+        4
+      ],
+      "pct": 0.2,
+      "tope": null,
+      "min": 0,
+      "desde": "2026-11-01",
+      "hasta": "2026-11-30",
+      "excluye": {
+        "palabras": [
+          "\\b(carnes?|novillo|novillito|ternera|vacuna|asado|vacio|matambre|nalga|cuadrada|peceto|bife|osobuco|falda|entrana|roast beef|carne picada|picada especial|menudencias?|pollo|pechugas?|suprema|muslos?|cerdo|bondiola|pechito|carre de cerdo|chorizos?|morcillas?|hamburguesas?)\\b",
+          "\\b(vinos?|espumantes?|champagne|champana|sidras?|cervezas?|fernet|whisky|whiskey|vodka|gin|ron|licor|aperitivo|vermut|vermouth|tequila|brandy|cognac|grappa|bebida alcoholica)\\b",
+          "\\b(televisor|smart tv|heladera|freezer|lavarropas|secarropas|microondas|aire acondicionado|ventilador|calefactor|licuadora|batidora|cafetera electrica|pava electrica|tostadora|plancha electrica|aspiradora|notebook|celular|tablet|horno electrico|anafe)\\b",
+          "\\b(neumaticos?|cubiertas?|bicicletas?|rodados?|monopatin)\\b"
+        ],
+        "marcas": [
+          "coca cola",
+          "coca-cola",
+          "sprite",
+          "fanta",
+          "aquarius",
+          "schweppes",
+          "powerade",
+          "cepita",
+          "del valle",
+          "ades",
+          "kin"
+        ],
+        "salvo": [
+          "\\b(caldo|sopa|saborizad\\w*|sabor a|alimento para|perros?|gatos?|pate|snacks?|galletitas?|vinagre|aceto|salsa|condimento|cuchillo|tabla)\\b"
+        ]
+      },
+      "nota": "Jueves 20% con Visa débito ICBC, sin tope. Aplican exclusiones",
+      "fuente": "coto.com.ar (promociones en sucursales, captura del 18/11/2026)"
+    },
+    {
+      "cad": "coto",
+      "medio": "comunidadcoto",
+      "dias": [
+        3
+      ],
+      "pct": 0.15,
+      "tope": null,
+      "min": 0,
+      "desde": "2026-11-01",
+      "hasta": "2026-11-30",
+      "excluye": {
+        "palabras": [
+          "\\b(carnes?|novillo|novillito|ternera|vacuna|asado|vacio|matambre|nalga|cuadrada|peceto|bife|osobuco|falda|entrana|roast beef|carne picada|picada especial|menudencias?|pollo|pechugas?|suprema|muslos?|cerdo|bondiola|pechito|carre de cerdo|chorizos?|morcillas?|hamburguesas?)\\b",
+          "\\b(vinos?|espumantes?|champagne|champana|sidras?|cervezas?|fernet|whisky|whiskey|vodka|gin|ron|licor|aperitivo|vermut|vermouth|tequila|brandy|cognac|grappa|bebida alcoholica)\\b",
+          "\\b(televisor|smart tv|heladera|freezer|lavarropas|secarropas|microondas|aire acondicionado|ventilador|calefactor|licuadora|batidora|cafetera electrica|pava electrica|tostadora|plancha electrica|aspiradora|notebook|celular|tablet|horno electrico|anafe)\\b",
+          "\\b(neumaticos?|cubiertas?|bicicletas?|rodados?|monopatin)\\b"
+        ],
+        "marcas": [
+          "coca cola",
+          "coca-cola",
+          "sprite",
+          "fanta",
+          "aquarius",
+          "schweppes",
+          "powerade",
+          "cepita",
+          "del valle",
+          "ades",
+          "kin"
+        ],
+        "salvo": [
+          "\\b(caldo|sopa|saborizad\\w*|sabor a|alimento para|perros?|gatos?|pate|snacks?|galletitas?|vinagre|aceto|salsa|condimento|cuchillo|tabla)\\b"
+        ]
+      },
+      "nota": "Miércoles 15% siendo socio de Comunidad Coto, con cualquier medio de pago, sin tope",
+      "fuente": "coto.com.ar (promociones en sucursales, captura del 18/11/2026)"
+    },
+    {
+      "cad": "dia",
+      "medio": "naranjax_turbo",
+      "dias": [
+        2
+      ],
+      "pct": 0.25,
+      "tope": 9500,
+      "min": 0,
+      "desde": "2026-11-01",
+      "hasta": "2026-12-31",
+      "nota": "Martes 25% (plan Turbo), tope $9.500/semana",
+      "fuente": "https://calcularsueldo.com.ar/?p=16411"
     }
   ]
 }
