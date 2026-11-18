@@ -37,6 +37,7 @@ jobs:
             --salida salida --app salida/app --catalogo catalogo.json
           ls -la salida salida/app/web | head -20
           du -sh salida/app/web
+          python pipeline/tiendas/revisar.py salida
       - uses: actions/upload-artifact@v4
         if: always()
         with:
