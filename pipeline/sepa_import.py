@@ -27,6 +27,23 @@ from datetime import date, datetime
 
 CKAN_URL = "https://datos.produccion.gob.ar/api/3/action/package_show?id=sepa-precios"
 DIAS = ["lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo"]  # date.weekday()
+# El servidor rechaza (403) pedidos con el User-Agent por defecto de Python: nos presentamos como un navegador.
+HEADERS = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36",
+           "Accept": "application/json, application/zip, */*", "Accept-Language": "es-AR,es;q=0.9"}
+# Plan B si la API del catálogo falla: cada día de la semana es un recurso fijo que se reemplaza semanalmente.
+_BASE = "https://datos.produccion.gob.ar/dataset/6f47ec76-d1ce-4e34-a7e1-621fe9b1d0b5/resource/"
+URLS_FIJAS = {
+    "lunes": _BASE + "0a9069a9-06e8-4f98-874d-da5578693290/download/sepa_lunes.zip",
+    "martes": _BASE + "9dc06241-cc83-44f4-8e25-c9b1636b8bc8/download/sepa_martes.zip",
+    "miercoles": _BASE + "1e92cd42-4f94-4071-a165-62c4cb2ce23c/download/sepa_miercoles.zip",
+    "jueves": _BASE + "d076720f-a7f0-4af8-b1d6-1b99d5a90c14/download/sepa_jueves.zip",
+    "viernes": _BASE + "91bc072a-4726-44a1-85ec-4a8467aad27e/download/sepa_viernes.zip",
+    "sabado": _BASE + "b3c3da5d-213d-41e7-8d74-f23fda0a3c30/download/sepa_sabado.zip",
+    "domingo": _BASE + "f8e75128-515a-436e-bf8d-5c63a62f2005/download/sepa_domingo.zip",
+}
+
+def abrir(url, timeout=60):
+    return urllib.request.urlopen(urllib.request.Request(url, headers=HEADERS), timeout=timeout)
 
 csv.field_size_limit(10_000_000)
 
@@ -205,8 +222,16 @@ def parsear_promo(leyenda):
 # ---------------------------------------------------------------- descarga
 def elegir_recurso(fecha):
     log("Consultando el catálogo de datos abiertos…")
-    with urllib.request.urlopen(CKAN_URL, timeout=60) as r:
-        res = json.load(r)["result"]["resources"]
+    try:
+        with abrir(CKAN_URL) as r:
+            res = json.load(r)["result"]["resources"]
+    except Exception as e:  # noqa: BLE001
+        # sin catálogo: el archivo de hoy si ya salió (~16:20), si no el de ayer
+        from datetime import datetime as _dt, timedelta
+        dia = fecha if _dt.now().hour >= 17 else fecha - timedelta(days=1)
+        log(f"⚠ No pude leer el catálogo ({e}). Uso la URL fija de {DIAS[dia.weekday()]}.")
+        return {"name": DIAS[dia.weekday()], "url": URLS_FIJAS[DIAS[dia.weekday()]],
+                "last_modified": dia.isoformat(), "size": 0}
     zips = [x for x in res if x.get("format", "").upper() == "ZIP" or x["url"].endswith(".zip")]
     dia = DIAS[fecha.weekday()]
     candidato = next((x for x in zips if sin_tildes(x["name"]) == dia), None)
@@ -227,7 +252,7 @@ def descargar(recurso, carpeta):
         return destino, fecha
     log(f"Descargando {recurso['url']} ({esperado/1e6:.0f} MB)…")
     tmp = destino + ".part"
-    with urllib.request.urlopen(recurso["url"], timeout=120) as r, open(tmp, "wb") as f:
+    with abrir(recurso["url"], timeout=300) as r, open(tmp, "wb") as f:
         bajado, t0 = 0, time.time()
         while True:
             b = r.read(1 << 20)
