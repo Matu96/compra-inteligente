@@ -115,9 +115,10 @@ def zona_catalogo(c):
     return f"{math.floor(la * TAM / TAM_CAT)}_{math.floor(lo * TAM / TAM_CAT)}"
 
 
-def armar_catalogo(tmp, celdas, productos, args):
+def armar_catalogo(tmp, celdas, productos, sucursales, args):
     """Por zona (0,2°): entran los productos genéricos (tipo) presentes en al menos --cobertura de sus
-    sucursales, con TODAS sus marcas (también las baratas o propias que tienen pocas sucursales)."""
+    sucursales y en al menos 2 cadenas (si la zona tiene más de una), con TODAS sus marcas
+    (también las baratas o propias que tienen pocas sucursales)."""
     pop_ean, pop_tipo = Counter(), Counter()
     elegidos = set()
     zonas = defaultdict(list)
@@ -131,8 +132,13 @@ def armar_catalogo(tmp, celdas, productos, args):
         suc_tipo = defaultdict(set)
         for ean, ss in pres.items():
             suc_tipo[productos[ean][3]] |= ss
-        n = len(set().union(*pres.values())) if pres else 1
-        tipos_ok = {t for t, ss in suc_tipo.items() if len(ss) / n >= args.cobertura and len(ss) >= min(2, n)}
+        todas = set().union(*pres.values()) if pres else set()
+        n = len(todas) or 1
+        cadenas_zona = {sucursales[x]["cad"] for x in todas}
+        min_cad = min(2, len(cadenas_zona))
+        tipos_ok = {t for t, ss in suc_tipo.items()
+                    if len(ss) / n >= args.cobertura and len(ss) >= min(2, n)
+                    and len({sucursales[x]["cad"] for x in ss}) >= min_cad}
         cand = sorted((e for e in pres if productos[e][3] in tipos_ok),
                       key=lambda e: (-len(suc_tipo[productos[e][3]]), -len(pres[e])))
         elegidos.update(cand[: args.max_por_zona])
@@ -221,7 +227,7 @@ def main():
             log("No se encontraron precios. ¿El ZIP está vacío o cambió el formato?")
             sys.exit(1)
         log(f"Pasada 2: catálogo sobre {len({zona_catalogo(c) for c in celdas})} zonas…")
-        catalogo, popularidad, pop_tipo = armar_catalogo(tmp, celdas, productos, args)
+        catalogo, popularidad, pop_tipo = armar_catalogo(tmp, celdas, productos, sucursales, args)
         log(f"  {len({productos[e][3] for e in catalogo}):,} productos genéricos · {len(catalogo):,} variantes/marcas")
 
         if os.path.exists(os.path.join(args.salida, "tiles")):
