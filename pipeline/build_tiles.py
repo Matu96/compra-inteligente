@@ -76,11 +76,15 @@ def pasada1(path_zip, args, tmp):
         for p in leer_csv(zf, f_prod):
             k = "-".join((p.get("id_comercio", ""), p.get("id_bandera", ""), p.get("id_sucursal", "")))
             s = locales.get(k)
-            if not s or p.get("productos_ean", "1").strip() != "1":
+            if not s:
                 continue
             ean = p.get("id_producto", "").strip().lstrip("0")
+            if p.get("productos_ean", "1").strip() != "1":
+                # código interno del comercio (p. ej. marcas propias de Coto: Coto, Ciudad del Lago).
+                # Sirve igual: esa marca solo se vende en esa cadena. Se le da un código único por comercio.
+                ean = f"i{p.get('id_comercio', '').strip()}-{ean}" if ean else ""
             lista = num(p.get("productos_precio_lista"))
-            if not ean or not lista or len(ean) < 7:
+            if not ean or not lista or len(ean) < 4:
                 continue
             if ean not in productos:
                 cant = num(p.get("productos_cantidad_presentacion", ""))

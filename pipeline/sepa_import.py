@@ -138,7 +138,7 @@ REGLAS_TIPO = [
     (r"\bpan\b.*\b(lactal|de molde|blanco)\b", "Pan lactal"),
     (r"\bgalletitas?\b.*\b(agua|crackers)\b", "Galletitas de agua"),
     (r"\b(tomate|pure de tomate)\b.*\b(triturado|pure|perita|entero)\b", "Tomate {2}"),
-    (r"\bduraznos?\b.*\b(light|diet|sin azucar|s azucar)\b", "Duraznos en almíbar light"),
+    (r"\bduraznos?\b.*\b(light|diet|sin azucar|s azucar|bajas calorias|bajo en calorias|bajas cal)\b", "Duraznos en almíbar light"),
     (r"\bduraznos?\b.*\b(mitad|mitades|almibar|lata|trozos|cubos|en cubitos)\b", "Duraznos en almíbar"),
     (r"\b(anana|pina)\b.*\b(rodajas|almibar|lata|trozos|cubos)\b", "Ananá en almíbar"),
     (r"\bcoctel de frutas\b|\bensalada de frutas\b.*\b(lata|almibar)\b", "Ensalada de frutas en almíbar"),
@@ -471,9 +471,9 @@ def procesar(path_zip, fecha, args):
             k = (p.get("id_comercio"), p.get("id_bandera"), p.get("id_sucursal"))
             if k not in locales:
                 continue
-            if p.get("productos_ean", "1").strip() != "1":   # 0 = código interno: no comparable entre cadenas
-                continue
             ean = p.get("id_producto", "").strip().lstrip("0")
+            if p.get("productos_ean", "1").strip() != "1":   # código interno (marcas propias): único por comercio
+                ean = f"i{p.get('id_comercio', '').strip()}-{ean}" if ean else ""
             lista = num(p.get("productos_precio_lista"))
             if not ean or not lista:
                 continue

@@ -57,7 +57,7 @@ function programar() {
 function pintar(raiz) {
   raiz.querySelectorAll('.foto[data-fotos]').forEach(el => {
     if (el.dataset.ok) return;
-    const eans = el.dataset.fotos.split(',').filter(Boolean);
+    const eans = el.dataset.fotos.split(',').filter(e => /^\d{7,14}$/.test(e));   // los códigos internos no tienen foto pública
     if (eans.some(e => !cache.has(e))) {            // primero preguntamos a Open Food Facts
       eans.forEach(e => { if (!cache.has(e)) pendientes.add(e); });
       return programar();
@@ -65,6 +65,7 @@ function pintar(raiz) {
     // candidatas en orden: fotos de Open Food Facts y, si fallan o no hay, las de Precios Claros
     const urls = [...eans.map(e => cache.get(e)).filter(Boolean), ...eans.slice(0, 2).map(PRECIOS_CLAROS)];
     el.dataset.ok = '1';
+    if (!urls.length) return;
     const img = new Image();
     img.alt = ''; img.loading = 'lazy'; img.decoding = 'async'; img.referrerPolicy = 'no-referrer';
     let i = 0;
