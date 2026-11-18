@@ -1,0 +1,57 @@
+name: Tiendas online (fotos, enlaces y promos)
+
+on:
+  schedule:
+    - cron: "17 9 * * *"          # todos los días 6:17 hora de Argentina
+  workflow_dispatch:
+    inputs:
+      tiendas: { description: "Tiendas (coma): jumbo,disco,vea,carrefour,dia,coto", required: false, default: "jumbo,disco,vea,carrefour,dia,coto" }
+      prueba: { description: "Prueba corta (pocas categorías, no publica)", required: false, default: "no" }
+
+permissions:
+  contents: write                 # para publicar el release "tiendas"
+  actions: write                  # para disparar la publicación de la app al terminar
+
+concurrency:
+  group: tiendas
+  cancel-in-progress: false
+
+jobs:
+  extraer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Instalar
+        run: |
+          pip install -q -r pipeline/tiendas/requirements.txt
+          python -m playwright install --with-deps chromium
+          python pipeline/tiendas/promo_parser.py
+      - name: Extraer catálogos
+        run: |
+          curl -sSf -o catalogo.json https://matu96.github.io/compra-inteligente/data/catalogo.json || echo "sin catálogo de la app"
+          PRUEBA=""; [ "${{ inputs.prueba }}" = "si" ] && PRUEBA="--prueba"
+          python pipeline/tiendas/main.py --tiendas "${{ inputs.tiendas || 'jumbo,disco,vea,carrefour,dia,coto' }}" $PRUEBA \
+            --salida salida --app salida/app --catalogo catalogo.json
+          ls -la salida salida/app/web | head -20
+          du -sh salida/app/web
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tiendas
+          path: |
+            salida/resumen.json
+            salida/coto_muestra.json
+            salida/productos.json
+          retention-days: 7
+      - name: Publicar para la app
+        if: inputs.prueba != 'si'
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          tar -czf tiendas-web.tar.gz -C salida/app web
+          gzip -kf salida/productos.json
+          gh release view tiendas >/dev/null 2>&1 || gh release create tiendas --title "Datos de tiendas online" --notes "Se actualiza solo todos los días."
+          gh release upload tiendas tiendas-web.tar.gz salida/productos.json.gz salida/resumen.json --clobber
+          gh workflow run actualizar.yml

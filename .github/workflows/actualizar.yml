@@ -32,6 +32,7 @@ jobs:
         run: |
           node tests/motor.test.mjs
           python tests/tipos_test.py
+          python pipeline/tiendas/promo_parser.py
 
       - name: Bajar SEPA y generar datos por zona
         env:
@@ -42,6 +43,12 @@ jobs:
         run: |
           command -v zstd || (sudo apt-get update -q && sudo apt-get install -y -q zstd)
           python pipeline/build_tiles.py --salida public/data
+
+      - name: Fotos, enlaces y promos de las tiendas online (si ya corrió "Tiendas online")
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          gh release download tiendas -p tiendas-web.tar.gz -D /tmp --clobber && tar -xzf /tmp/tiendas-web.tar.gz -C public/data \
+            && du -sh public/data/web || echo "todavía no hay datos de tiendas online"
 
       - name: Armar el sitio
         run: |
