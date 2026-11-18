@@ -7,7 +7,8 @@ Salida (carpeta --salida, por defecto public/data):
   catalogo.json         {tipos: [producto genérico], productos: [[EAN, nombre, marca, presentación, índice de tipo]]}
   tiles/<lat>_<lng>.json  sucursales de esa cuadrícula + listas de precios por cadena
 
-Cuadrícula: celdas de 0,1° (~11 x 9 km). La app baja la celda donde está la persona y las vecinas.
+Cuadrícula: celdas de 0,05° (~5,5 x 4,5 km). La app baja solo las celdas que cubren su radio.
+El catálogo se decide en zonas más grandes (0,2°) para que no dependa de celdas con pocas sucursales.
 Para que pese poco, cada cadena tiene una "lista base" por celda (el precio más común de cada producto)
 y cada sucursal guarda solo lo que difiere de esa lista.
 
@@ -24,7 +25,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sepa_import import (obtener_sepa, iterar_comercios, buscar, leer_csv, num,
                          parsear_promo, clave_cadena, tipo_de, log)
 
-TAM = 0.1
+TAM = 0.05      # celdas que baja la app (~5 km)
+TAM_CAT = 0.2   # zonas para decidir qué productos entran al catálogo (~20 km)
 
 
 def celda(lat, lng):
@@ -108,23 +110,32 @@ def leer_celda(tmp, c):
             yield sid, ean, float(lista), float(promo), ley
 
 
+def zona_catalogo(c):
+    la, lo = (int(x) for x in c.split("_"))
+    return f"{math.floor(la * TAM / TAM_CAT)}_{math.floor(lo * TAM / TAM_CAT)}"
+
+
 def armar_catalogo(tmp, celdas, productos, args):
-    """Por celda: entran los productos genéricos (tipo) presentes en buena parte de las sucursales,
-    con TODAS sus marcas (también las baratas o propias que tienen pocas sucursales)."""
+    """Por zona (0,2°): entran los productos genéricos (tipo) presentes en al menos --cobertura de sus
+    sucursales, con TODAS sus marcas (también las baratas o propias que tienen pocas sucursales)."""
     pop_ean, pop_tipo = Counter(), Counter()
     elegidos = set()
+    zonas = defaultdict(list)
     for c in celdas:
+        zonas[zona_catalogo(c)].append(c)
+    for z, cs in zonas.items():
         pres = defaultdict(set)
-        for sid, ean, *_ in leer_celda(tmp, c):
-            pres[ean].add(sid)
+        for c in cs:
+            for sid, ean, *_ in leer_celda(tmp, c):
+                pres[ean].add(sid)
         suc_tipo = defaultdict(set)
         for ean, ss in pres.items():
             suc_tipo[productos[ean][3]] |= ss
-        n = len(set().union(*pres.values())) or 1
-        tipos_ok = {t for t, ss in suc_tipo.items() if len(ss) / n >= args.cobertura or len(ss) >= args.min_sucursales}
+        n = len(set().union(*pres.values())) if pres else 1
+        tipos_ok = {t for t, ss in suc_tipo.items() if len(ss) / n >= args.cobertura and len(ss) >= min(2, n)}
         cand = sorted((e for e in pres if productos[e][3] in tipos_ok),
                       key=lambda e: (-len(suc_tipo[productos[e][3]]), -len(pres[e])))
-        elegidos.update(cand[: args.max_por_celda])
+        elegidos.update(cand[: args.max_por_zona])
         for ean, ss in pres.items():
             pop_ean[ean] += len(ss)
         for t, ss in suc_tipo.items():
@@ -189,9 +200,8 @@ def main():
     ap.add_argument("--cache", default="sepa_cache")
     ap.add_argument("--salida", default="public/data")
     ap.add_argument("--provincia", help="limitar a una provincia (AR-C, AR-B, …) para pruebas")
-    ap.add_argument("--cobertura", type=float, default=0.25, help="presencia mínima del producto genérico (cualquier marca) en las sucursales de la celda")
-    ap.add_argument("--min-sucursales", type=int, default=15, help="…o presente en al menos N sucursales de la celda")
-    ap.add_argument("--max-por-celda", type=int, default=8000, help="tope de variantes (EAN) por celda")
+    ap.add_argument("--cobertura", type=float, default=0.2, help="presencia mínima del producto genérico (cualquier marca) en las sucursales de la zona")
+    ap.add_argument("--max-por-zona", type=int, default=8000, help="tope de variantes (EAN) por zona de catálogo")
     ap.add_argument("--min-productos", type=int, default=80, help="sucursales con menos productos del catálogo se descartan")
     args = ap.parse_args()
 
@@ -210,7 +220,7 @@ def main():
         if not celdas:
             log("No se encontraron precios. ¿El ZIP está vacío o cambió el formato?")
             sys.exit(1)
-        log(f"Pasada 2: catálogo sobre {len(celdas)} celdas…")
+        log(f"Pasada 2: catálogo sobre {len({zona_catalogo(c) for c in celdas})} zonas…")
         catalogo, popularidad, pop_tipo = armar_catalogo(tmp, celdas, productos, args)
         log(f"  {len({productos[e][3] for e in catalogo}):,} productos genéricos · {len(catalogo):,} variantes/marcas")
 
