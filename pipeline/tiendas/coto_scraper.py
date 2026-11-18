@@ -132,17 +132,17 @@ def _descuentos(attrs, lista):
             p["descripcion"] += " (no acumulable)"
         promos.append(p)
     for d in _json(attrs.get("product.dtoDescuentosMediosPago")) or []:
-        if isinstance(d, dict):
-            texto = " ".join(str(v).strip() for k, v in d.items()
-                             if isinstance(v, str) and v.strip() and re.search(r"texto|desc|nombre|medio|banco|tarjeta|leyenda", k, re.I)
-                             and not v.strip().startswith(("http", "{", "[")) and not re.fullmatch(r"[\d.,\s$]+", v.strip()))
-        else:
-            texto = str(d)
-        if texto.strip():
-            p = promo(texto, lista)
-            p["tipo"] = "bancaria"
-            p["precio_unitario_promo"] = None
-            promos.append(p)
+        if not isinstance(d, dict):
+            continue
+        # cuotas sin interés: {"cantidadCuotas": "12", "precioCuota": "$16194.67", "imagenDescuento": ".../pagando-con-todas-tarjetas.png"}
+        texto = str(d.get("textoDescuento") or d.get("descripcion") or "").strip()
+        if not texto and d.get("cantidadCuotas"):
+            cuota = _precio(d.get("precioCuota"))
+            quien = re.sub(r"[-_]+", " ", re.sub(r"^.*/|\.\w+$", "", str(d.get("imagenDescuento") or ""))).strip()
+            quien = quien.replace("pagando ", "", 1) if quien else "con tarjeta"
+            texto = f"{d['cantidadCuotas']} cuotas sin interés" + (f" de ${cuota:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if cuota else "") + f" {quien}"
+        if texto:
+            promos.append({"tipo": "bancaria", "descripcion": texto, "precio_unitario_promo": None})
     unicas, vistos = [], set()
     for p in promos:
         k = p["descripcion"].lower()

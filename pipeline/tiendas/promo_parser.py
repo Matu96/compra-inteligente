@@ -24,9 +24,9 @@ _FIDELIDAD = r"comunidad|mi carrefour|mi crf|club d[ií]a|club dia|jumbo ?(\+|ma
              r"prime|socios?|tarjeta (coto|carrefour|cencosud|jumbo|disco)|cencosud score|beneficio exclusivo"
 _BANCARIA = r"banco|bna|naci[oó]n|provincia|cuenta dni|santander|galicia|bbva|macro|ciudad|hsbc|icbc|supervielle|patagonia|" \
             r"credicoop|comafi|columbia|hipotecario|visa|master|amex|american express|cabal|naranja|mercado ?pago|modo|" \
-            r"personal pay|uala|ual[aá]|brubank|lemon|prex|billetera|tarjeta|d[eé]bito|cr[eé]dito|cuotas|\\bcsi\\b|cencopay|reintegro"
+            r"\b1 pago\b|personal pay|uala|ual[aá]|brubank|lemon|prex|billetera|tarjeta|d[eé]bito|cr[eé]dito|cuotas|\bcsi\b|cencopay|reintegro"
 _VOLUMEN = r"\b\d+\s*x\s*\d+\b|\b(2|3|4)\s*(da|do|ra|ro|ta|to|°|º)?\s*(unidad|u\.?)?\s*al\s*\d+|segund[ao]|tercer[ao]|llevando|" \
-           r"lleva\s*\d|comprando\s*\d|\bx\s*\d+\s*u|\d+\s*unidades|combo|pack"
+           r"\d+\s*%\s*(en\s*la\s*)?(2|3)\s*(da|do|ra|ro)\b|\b(2|3)\s*(da|do|ra|ro)\s*\d+\s*%|lleva\s*\d|comprando\s*\d|\bx\s*\d+\s*u|\d+\s*unidades|combo|pack"
 
 
 def _n(t):
@@ -65,27 +65,31 @@ def precio_unitario(texto, precio, tipo=None):
     tipo = tipo or clasificar(texto)
     if t.startswith("hasta"):          # "Hasta 3x2 en Bebidas": campaña, el descuento real depende del producto
         return None
+    if tipo == "bancaria":             # topes, días y medios: lo calcula la app con promos.json
+        return precio_explicito(texto)
     # "4x3", "3 x 2": llevás N y pagás M
     m = re.search(r"\b(\d+)\s*x\s*(\d+)\b", t)
     if m:
         n, p = int(m.group(1)), int(m.group(2))
         if 1 <= p < n <= 12:
             return round(precio * p / n, 2)
-    # "2da al 70%", "2do al 50", "segunda unidad al 80%", "70% en la 2da", "3ra al 50%"
+    # segunda/tercera unidad con descuento: "2da al 70%", "segunda unidad al 80%", "70% en la 2da", "2da 80%", "3ra al 50%"
+    orden = {"segund": 2, "tercer": 3, "cuart": 4}
+    k = pct = None
     m = re.search(r"\b(2|3|4)\s*(?:da|do|ra|ro|ta|to|°|º)?\s*(?:unidad|u\.?)?\s*(?:al|con|a)\s*(?:el\s*)?(\d{1,3})\s*%?", t) \
-        or re.search(r"\b(segund|tercer|cuart)[ao]\s*(?:unidad)?\s*(?:al|con|a)\s*(\d{1,3})\s*%?", t)
-    m2 = re.search(r"(\d{1,3})\s*%\s*(?:off|dto\.?|de descuento|desc\.?)?\s*(?:en|sobre)\s*la\s*(2|3|4|segund|tercer|cuart)", t)
-    if m or m2:
-        orden = {"segund": 2, "tercer": 3, "cuart": 4}
+        or re.search(r"\b(segund|tercer|cuart)[ao]\s*(?:unidad)?\s*(?:al|con|a)\s*(\d{1,3})\s*%?", t) \
+        or re.search(r"\b(2|3|4)\s*(?:da|do|ra|ro)\s*(\d{1,3})\s*%", t)
+    if m:
+        k, pct = m.group(1), int(m.group(2))
+    else:
+        m = re.search(r"(\d{1,3})\s*%\s*(?:off|dto\.?|de descuento|desc\.?)?\s*(?:(?:en|sobre)\s*la\s*)?"
+                      r"(2|3|4|segund|tercer|cuart)(?:da|do|ra|ro|a|o)?\b", t)
         if m:
-            k, pct = m.group(1), int(m.group(2))
-        else:
-            pct, k = int(m2.group(1)), m2.group(2)
-        k = orden.get(k, None) or int(k)
+            pct, k = int(m.group(1)), m.group(2)
+    if k is not None:
+        k = orden.get(k) or int(k)
         if 0 < pct <= 100:
             return round(precio * (k - 1 + (1 - pct / 100)) / k, 2)
-    if tipo == "bancaria":
-        return precio_explicito(texto)
     # precio explícito del texto ("Precio Comunidad Coto $1.234", "2 por $3.000")
     m = re.search(r"\b(\d+)\s*(?:por|x)\s*\$\s*([\d.]+(?:,\d{1,2})?)", t)
     if m:
@@ -121,7 +125,7 @@ if __name__ == "__main__":
              ("70% en la 2da unidad", 1000, 650.0), ("3ra al 50%", 900, 750.0), ("Llevando 3, 20% off", 1000, 800.0),
              ("2 por $3.000", 2000, 1500.0), ("Precio Comunidad Coto $1.234,50", 1500, 1234.5),
              ("20% dto. Mi Carrefour", 1000, 800.0), ("Banco Nación 25% los miércoles", 1000, None),
-             ("Hasta 3x2 en Bebidas", 1000, None), ("25% + 3 CSI con Cencopay", 1000, None), ("40%Dto", 3675, 2205.0)]
+             ("Hasta 3x2 en Bebidas", 1000, None), ("70% 2da", 1000, 650.0), ("Cybermonday card 2da 80%", 1000, 600.0), ("25% + 3 CSI con Cencopay", 1000, None), ("40%Dto", 3675, 2205.0)]
     mal = 0
     for t, p, esperado in casos:
         got = precio_unitario(t, p)
@@ -130,7 +134,7 @@ if __name__ == "__main__":
             print(f"✗ {t!r} con ${p}: {got} (esperado {esperado})")
     tipos = [("2x1", "volumen"), ("2da al 70%", "volumen"), ("20% dto. Mi Carrefour", "fidelidad"),
              ("Precio Comunidad Coto", "fidelidad"), ("Club Día 10%", "fidelidad"), ("Jumbo+ 15%", "fidelidad"),
-             ("Mercado Pago 20%", "bancaria"), ("Miembros Comunidad", "fidelidad"), ("25% + 3 CSI con Cencopay", "bancaria"), ("Visa 6 cuotas sin interés", "bancaria"), ("25% off", "directa")]
+             ("Mercado Pago 20%", "bancaria"), ("Miembros Comunidad", "fidelidad"), ("70% 2da c/u", "volumen"), ("1 Pago 15%", "bancaria"), ("25% + 3 CSI con Cencopay", "bancaria"), ("Visa 6 cuotas sin interés", "bancaria"), ("25% off", "directa")]
     for t, esperado in tipos:
         if clasificar(t) != esperado:
             mal += 1
