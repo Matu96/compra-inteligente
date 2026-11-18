@@ -10,6 +10,7 @@ ap.add_argument("texto"); ap.add_argument("--cadena", default="")
 ap.add_argument("--lat", type=float, default=-34.6186); ap.add_argument("--lng", type=float, default=-58.4410)
 ap.add_argument("--radio", type=float, default=3); ap.add_argument("--sepa", required=True); ap.add_argument("--data", required=True)
 a = ap.parse_args()
+if a.cadena in ("-", "todas", "todas las cadenas"): a.cadena = ""
 toks = sin_tildes(a.texto).split()
 
 print(f"== SEPA crudo: '{a.texto}' en {a.cadena or 'todas'} a <{a.radio} km ==")
