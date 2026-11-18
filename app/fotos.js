@@ -1,5 +1,10 @@
-// fotos.js — fotos de productos por código de barras, con caché en el teléfono.
-// Fuente 1: Open Food Facts (CC BY-SA). Fuente 2, si no hay: el portal oficial Precios Claros (mismo origen que SEPA).
+// fotos.js — fotos de producto por código de barras, con caché en el teléfono.
+// Solo fotos de estudio: el portal oficial Precios Claros. Open Food Facts quedó desactivado porque sus fotos son
+// sacadas por usuarios (probado: 0-2 % de fondo blanco). Para sumar una fuente con licencia (GS1 Argentina, o el
+// permiso de una cadena) basta con agregarla en FUENTES.
+// Sin foto, se muestra una tarjeta con la marca (la arma app.js con data-marca).
+const USAR_OFF = false;
+const FUENTES = [e => `https://imagenes.preciosclaros.gob.ar/productos/${e.padStart(13, '0')}.jpg`];
 // Uso: en el HTML, <span class="foto" data-fotos="ean1,ean2"></span>; después llamar aplicarFotos(raíz).
 // Se muestra la primera foto disponible de la lista de EANs (sirve para "cualquier marca").
 
@@ -60,20 +65,21 @@ function pintar(raiz) {
   raiz.querySelectorAll('.foto[data-fotos]').forEach(el => {
     if (el.dataset.ok) return;
     const eans = el.dataset.fotos.split(',').filter(e => /^\d{7,14}$/.test(e));   // los códigos internos no tienen foto pública
-    if (eans.some(e => !cache.has(e))) {            // primero preguntamos a Open Food Facts
+    if (USAR_OFF && eans.some(e => !cache.has(e))) {            // Open Food Facts (desactivado)
       eans.forEach(e => { if (!cache.has(e)) pendientes.add(e); });
       return programar();
     }
     // candidatas en orden: fotos de Open Food Facts y, si fallan o no hay, las de Precios Claros
     const grande = el.classList.contains('grande');
-    const urls = [...eans.map(e => cache.get(e)).filter(Boolean).map(u => grande ? aGrande(u) : u), ...eans.slice(0, 2).map(PRECIOS_CLAROS)];
+    const urls = [...eans.slice(0, 3).flatMap(e => FUENTES.map(f => f(e))),
+      ...(USAR_OFF ? eans.map(e => cache.get(e)).filter(Boolean).map(u => grande ? aGrande(u) : u) : [])];
     el.dataset.ok = '1';
     if (!urls.length) return;
     el.classList.add('cargando');
     const img = new Image();
     img.alt = ''; img.loading = 'lazy'; img.decoding = 'async'; img.referrerPolicy = 'no-referrer';
     let i = 0;
-    img.onload = () => { if (img.naturalWidth > 10) { el.classList.remove('cargando'); el.classList.add('con-foto'); } else img.onerror(); };
+    img.onload = () => { if (img.naturalWidth >= 120) { el.classList.remove('cargando'); el.classList.add('con-foto'); } else img.onerror(); };
     img.onerror = () => { if (++i < urls.length) img.src = urls[i]; else { img.remove(); el.classList.remove('cargando'); } };
     img.src = urls[0];
     el.appendChild(img);

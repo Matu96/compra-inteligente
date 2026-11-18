@@ -66,9 +66,19 @@ function eansFoto(ti, marcas = []) {
   const elegidos = marcas.length ? ps.filter(pi => marcas.includes(PROD[pi][2] || 'Sin marca')) : ps;
   return elegidos.slice(0, 4).map(pi => PROD[pi][0]);
 }
-const foto = (eans, clase = '') => `<span class="foto ${clase}" data-fotos="${esc(eans.join(','))}" aria-hidden="true"></span>`;
+/** Tarjeta de producto: la foto de estudio si existe; si no, una etiqueta con la marca en un color propio de la marca. */
+function tonoMarca(t) { let h = 0; for (const c of norm(t)) h = (h * 31 + c.charCodeAt(0)) % 360; return h; }
+function etiquetaMarca(marca, tipo) {
+  const txt = titulo(marca && marca !== 'Sin marca' ? marca : (tipo || '').split(' ')[0]) || '·';
+  const corto = txt.length > 22 ? txt.slice(0, 21) + '…' : txt;
+  const palabra = Math.max(...corto.split(/\s+/).map(w => w.length));
+  const k = Math.min(1, 7 / Math.max(palabra, 1)).toFixed(2);      // achica la letra para que ninguna palabra se corte
+  return `<span class="et" style="--h:${tonoMarca(txt)};--k:${k}"><b>${esc(corto)}</b></span>`;
+}
+const foto = (eans, clase = '', marca = '', tipo = '') => `<span class="foto ${clase}" data-fotos="${esc(eans.join(','))}" aria-hidden="true">${etiquetaMarca(marca, tipo)}</span>`;
+const marcaDe = ean => POR_EAN.get(ean)?.[2] || '';
 /** Foto que abre la ficha del producto al tocarla. */
-const fotoFicha = (eans, clase = '', ctx = '') => `<button type="button" class="foto-btn" data-ficha="${esc(eans[0] || '')}" data-ctx="${esc(ctx)}" aria-label="Ver ficha del producto">${foto(eans, clase)}</button>`;
+const fotoFicha = (eans, clase = '', marca = '', tipo = '') => `<button type="button" class="foto-btn" data-ficha="${esc(eans[0] || '')}" aria-label="Ver ficha del producto">${foto(eans, clase, marca, tipo)}</button>`;
 const textoMarcas = it => !it.marcas.length ? 'Cualquier marca' : it.marcas.length === 1 ? titulo(it.marcas[0]) : `${titulo(it.marcas[0])} y ${it.marcas.length - 1} más`;
 const cercanas = () => estado.ubic ? stores.filter(s => km(estado.ubic, s) <= estado.radio) : [];
 
@@ -176,7 +186,7 @@ function initControles() {
   const b = $('#buscar'), sg = $('#sugg');
   let act = 0, opts = [];
   const pintar = () => {
-    sg.innerHTML = opts.map((o, i) => `<div role="option" data-i="${i}" class="${i === act ? 'act' : ''}" aria-selected="${i === act}">${foto(eansFoto(o.ti, o.marca ? [o.marca] : []))}<span>${esc(TIPOS[o.ti])}${o.marca ? `, ${esc(titulo(o.marca))}` : ''}<small>${o.marca ? 'Solo esta marca' : `Cualquier marca, la más barata de ${marcasDe(o.ti).length}`}</small></span></div>`).join('');
+    sg.innerHTML = opts.map((o, i) => `<div role="option" data-i="${i}" class="${i === act ? 'act' : ''}" aria-selected="${i === act}">${foto(eansFoto(o.ti, o.marca ? [o.marca] : []), '', o.marca || '', TIPOS[o.ti])}<span>${esc(TIPOS[o.ti])}${o.marca ? `, ${esc(titulo(o.marca))}` : ''}<small>${o.marca ? 'Solo esta marca' : `Cualquier marca, la más barata de ${marcasDe(o.ti).length}`}</small></span></div>`).join('');
     sg.style.display = opts.length ? 'block' : 'none';
     aplicarFotos(sg);
   };
@@ -242,7 +252,7 @@ function renderLista() {
   $('#sugerencias').innerHTML = estado.lista.length < 6 && populares.length
     ? `<h2>${estado.lista.length ? 'Sumá algo más' : 'Lo que más se compra'}</h2><div class="chips">${populares.map(t => `<button type="button" class="chip" data-ti="${t}">${esc(TIPOS[t])}</button>`).join('')}</div>` : '';
   $('#lista').innerHTML = estado.lista.map((it, i) => `
-    <li class="item">${fotoFicha(eansFoto(TIPO_IDX.get(it.tipo), it.marcas), 'f-item')}<span class="n">${esc(it.tipo)}</span>
+    <li class="item">${fotoFicha(eansFoto(TIPO_IDX.get(it.tipo), it.marcas), 'f-item', it.marcas.length === 1 ? it.marcas[0] : '', it.tipo)}<span class="n">${esc(it.tipo)}</span>
       <span class="paso"><button type="button" data-a="-" data-i="${i}" aria-label="Uno menos de ${esc(it.tipo)}">−</button><b aria-live="polite">${it.qty}</b><button type="button" data-a="+" data-i="${i}" aria-label="Uno más de ${esc(it.tipo)}">+</button></span>
       <button type="button" class="marca-btn" data-a="m" data-i="${i}" aria-haspopup="dialog"><span>${esc(textoMarcas(it))}</span>${ICONO.flecha}</button></li>`).join('');
   aplicarFotos($('#lista'));
@@ -281,7 +291,7 @@ function pintarHoja() {
   const linea = m => { const x = info.get(m); return x.sucs.size ? `Desde ${fmt(x.min)} en ${x.sucs.size} súper cerca` : 'No está en los súper cercanos'; };
   const filtro = norm($('#hojaFiltro').value);
   $('#hojaMarcas').innerHTML = `<li class="cualquiera"><label><input type="checkbox" data-m="" ${it.marcas.length ? '' : 'checked'}><span>Cualquier marca<small>Se elige la más barata en cada súper</small></span></label></li>` +
-    marcas.map(m => `<li data-m="${esc(m)}" ${filtro && !norm(m).includes(filtro) ? 'hidden' : ''}><label><input type="checkbox" data-m="${esc(m)}" ${it.marcas.includes(m) ? 'checked' : ''}>${fotoFicha(eansFoto(ti, [m]), '', 'marca')}<span>${esc(titulo(m))}<small>${linea(m)}</small></span></label></li>`).join('');
+    marcas.map(m => `<li data-m="${esc(m)}" ${filtro && !norm(m).includes(filtro) ? 'hidden' : ''}><label><input type="checkbox" data-m="${esc(m)}" ${it.marcas.includes(m) ? 'checked' : ''}>${fotoFicha(eansFoto(ti, [m]), '', m, TIPOS[ti])}<span>${esc(titulo(m))}<small>${linea(m)}</small></span></label></li>`).join('');
   aplicarFotos($('#hojaMarcas'));
 }
 
@@ -309,7 +319,7 @@ function abrirFicha(ean) {
   const min = filas[0]?.l.total, max = filas[filas.length - 1]?.l.total;
   const enLista = estado.lista.some(it => it.tipo === TIPOS[ti] && (!it.marcas.length || it.marcas.includes(marca || 'Sin marca')));
   $('#fichaCuerpo').innerHTML = `
-    <div class="ficha-foto">${foto([ean], 'grande')}</div>
+    <div class="ficha-foto">${foto([ean], 'grande', marca, TIPOS[ti])}</div>
     <h2 id="fichaNombre">${esc(titulo(nombre))}</h2>
     <p class="ficha-meta">${[marca && `<b>${esc(titulo(marca))}</b>`, pres && esc(pres), esc(TIPOS[ti])].filter(Boolean).join('<span aria-hidden="true"> / </span>')}</p>
     <p class="ficha-ean">${interno ? 'Código interno del súper' : `EAN ${esc(ean)}`}</p>
@@ -355,8 +365,8 @@ const kmTxt = d => d.toFixed(1).replace('.', ',') + ' km';
 
 function lineasTicket(r) {
   return r.lineas.map(l => l.p === null
-    ? `<div class="tl falta">${foto(eansFoto(TIPO_IDX.get(l.it.tipo), l.it.marcas))}<span class="n">${esc(l.it.tipo)}</span><span class="t">—</span><span class="d">${l.it.marcas.length ? 'No tiene la marca que elegiste' : 'No lo tiene'}</span></div>`
-    : `<div class="tl">${fotoFicha([l.ean])}<span class="n">${esc(l.it.tipo)}</span><span class="t">${fmt(l.total)}</span>
+    ? `<div class="tl falta">${foto(eansFoto(TIPO_IDX.get(l.it.tipo), l.it.marcas), '', l.it.marcas[0] || '', l.it.tipo)}<span class="n">${esc(l.it.tipo)}</span><span class="t">—</span><span class="d">${l.it.marcas.length ? 'No tiene la marca que elegiste' : 'No lo tiene'}</span></div>`
+    : `<div class="tl">${fotoFicha([l.ean], '', marcaDe(l.ean), l.it.tipo)}<span class="n">${esc(l.it.tipo)}</span><span class="t">${fmt(l.total)}</span>
         <span class="d">${esc(titulo(POR_EAN.get(l.ean)?.[1] || ''))}</span>
         <span class="d">${l.it.qty} × ${fmt(l.unit)}${l.aplica && Math.round(l.unit) < Math.round(l.p) ? ` <span class="tachado">${fmt(l.p)}</span>` : ''}${l.promo ? ` <span class="of">${esc(l.promo)}</span>` : ''}${l.sinPago ? ` <span class="sinpago">${l.sinPago === 'oferta' ? 'Sin descuento por pago: ya tiene oferta' : 'Excluido de la promo de pago'}</span>` : ''}</span></div>`).join('');
 }
