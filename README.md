@@ -34,10 +34,10 @@ No hay servidor encendido: todo es estático, gratis y escala solo. La app funci
 
 Desde ahí se actualiza sola todos los días.
 
-### Si la descarga de SEPA falla desde GitHub
-`datos.produccion.gob.ar` puede bloquear servidores del exterior. Si el paso "Bajar SEPA" falla con error de conexión o 403:
+### De dónde baja SEPA
+`datos.produccion.gob.ar` bloquea a los servidores de GitHub (responde 403). Por eso el script, si el sitio oficial falla, usa la **copia diaria del espejo público** del proyecto [preciazo](https://github.com/catdevnull/preciazo) (índice en `catdevnull/sepa-precios-metadata`), que tiene el mismo contenido. Si algún día el espejo deja de actualizarse:
 - cargá un proxy argentino en **Settings → Secrets and variables → Actions → New secret** con nombre `SEPA_PROXY` (ej. `http://usuario:clave@host:puerto`), o
-- corré el generador en una compu en Argentina y subí `public/data` (ver "Probar en tu compu").
+- registrá tu compu como *self-hosted runner* (Settings → Actions → Runners) y cambiá `runs-on: ubuntu-latest` por `runs-on: self-hosted` en el job `build`: la descarga sale desde Argentina.
 
 Si un día falla, la web sigue mostrando los datos del último día que funcionó.
 

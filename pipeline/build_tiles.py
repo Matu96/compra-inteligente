@@ -21,7 +21,7 @@ from collections import Counter, defaultdict
 from datetime import date, datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sepa_import import (elegir_recurso, descargar, iterar_comercios, buscar, leer_csv, num,
+from sepa_import import (obtener_sepa, iterar_comercios, buscar, leer_csv, num,
                          parsear_promo, clave_cadena, tipo_de, log)
 
 TAM = 0.1
@@ -200,7 +200,7 @@ def main():
     if args.zip:
         path_zip, fecha_dato = args.zip, fecha.isoformat()
     else:
-        path_zip, fecha_dato = descargar(elegir_recurso(fecha), args.cache)
+        path_zip, fecha_dato = obtener_sepa(fecha, args.cache)
 
     tmp = tempfile.mkdtemp(prefix="sepa_celdas_")
     try:

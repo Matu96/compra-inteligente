@@ -21,7 +21,7 @@ Marcas: cada producto lleva "tipo" (producto genérico = descripción sin la mar
 así la app puede ofrecer "elegir marca" o "cualquier marca, la más barata". El filtro de cobertura
 se aplica por tipo (no por EAN) para no perder las marcas baratas que tienen menos sucursales.
 """
-import argparse, csv, io, json, math, os, re, sqlite3, sys, time, unicodedata, urllib.request, zipfile
+import argparse, csv, io, json, math, os, re, shutil, sqlite3, subprocess, sys, time, unicodedata, urllib.request, zipfile
 from collections import Counter, defaultdict
 from datetime import date, datetime
 
@@ -41,6 +41,10 @@ URLS_FIJAS = {
     "sabado": _BASE + "b3c3da5d-213d-41e7-8d74-f23fda0a3c30/download/sepa_sabado.zip",
     "domingo": _BASE + "f8e75128-515a-436e-bf8d-5c63a62f2005/download/sepa_domingo.zip",
 }
+
+# Espejo público (proyecto preciazo): copia diaria de cada archivo SEPA, ya descomprimido, en .tar.zst.
+# Se usa si datos.produccion.gob.ar rechaza la descarga (bloquea, por ejemplo, a los servidores de GitHub).
+ESPEJO_INDICE = "https://raw.githubusercontent.com/catdevnull/sepa-precios-metadata/main/index.json"
 
 def abrir(url, timeout=60):
     return urllib.request.urlopen(urllib.request.Request(url, headers=HEADERS), timeout=timeout)
@@ -267,6 +271,44 @@ def descargar(recurso, carpeta):
     return destino, fecha
 
 
+def descargar_espejo(carpeta, fecha_max=None):
+    """Baja la copia más reciente del espejo y la descomprime. Devuelve (carpeta, fecha)."""
+    with abrir(ESPEJO_INDICE) as r:
+        indice = json.load(r)
+    fechas = sorted((f for f, v in indice.items() if any(x.get("link") for x in v)
+                     and (not fecha_max or f <= fecha_max)), reverse=True)
+    if not fechas:
+        raise RuntimeError("el espejo no tiene archivos")
+    fecha = fechas[0]
+    entrada = [x for x in indice[fecha] if x.get("link")][-1]
+    destino = os.path.join(carpeta, f"sepa_{fecha}")
+    if os.path.isdir(destino) and os.listdir(destino):
+        log(f"Ya descargado del espejo: {destino}")
+        return destino, fecha
+    os.makedirs(carpeta, exist_ok=True)
+    archivo = destino + ".tar.zst"
+    log(f"Descargando copia del espejo ({fecha}): {entrada['link']}")
+    with abrir(entrada["link"], timeout=600) as r, open(archivo + ".part", "wb") as f:
+        shutil.copyfileobj(r, f, 1 << 20)
+    os.replace(archivo + ".part", archivo)
+    log(f"  {os.path.getsize(archivo)/1e6:.0f} MB · descomprimiendo…")
+    os.makedirs(destino, exist_ok=True)
+    zstd = subprocess.Popen(["zstd", "-d", "--long=31", "-c", archivo], stdout=subprocess.PIPE)
+    subprocess.run(["tar", "-x", "-C", destino], stdin=zstd.stdout, check=True)
+    if zstd.wait() != 0:
+        raise RuntimeError("zstd no pudo descomprimir la copia")
+    os.remove(archivo)
+    return destino, fecha
+
+def obtener_sepa(fecha, carpeta):
+    """Archivo del día: primero el sitio oficial; si falla, el espejo. Devuelve (ruta ZIP o carpeta, fecha del dato)."""
+    try:
+        return descargar(elegir_recurso(fecha), carpeta)
+    except Exception as e:  # noqa: BLE001
+        log(f"⚠ No pude bajar del sitio oficial ({e}). Pruebo con el espejo público…")
+        return descargar_espejo(carpeta, fecha.isoformat())
+
+
 # ---------------------------------------------------------------- lectura de CSV SEPA
 def leer_csv(zf, nombre):
     """Lee un CSV de SEPA tolerando UTF-16, BOM, separador | o ; y la línea final de 'Última actualización'."""
@@ -285,8 +327,27 @@ def leer_csv(zf, nombre):
                 continue
             yield dict(zip(cols, (c.strip() for c in fila)))
 
+class _Carpeta:
+    """Carpeta de un comercio ya descomprimida, con la misma interfaz que ZipFile (namelist/open)."""
+    def __init__(self, ruta): self.ruta = ruta
+    def namelist(self): return os.listdir(self.ruta)
+    def open(self, n): return open(os.path.join(self.ruta, n), "rb")
+
 def iterar_comercios(path_zip):
-    """El ZIP del día trae un ZIP por comercio (a veces en subcarpetas). Devuelve ZipFile por comercio."""
+    """El ZIP del día trae un ZIP por comercio (a veces en subcarpetas). Devuelve ZipFile por comercio.
+    También acepta una carpeta ya descomprimida (copia del espejo)."""
+    if os.path.isdir(path_zip):
+        for raiz, _, archivos in sorted(os.walk(path_zip)):
+            bajos = {a.lower() for a in archivos}
+            if "productos.csv" in bajos:
+                yield os.path.relpath(raiz, path_zip), _Carpeta(raiz)
+            for a in sorted(archivos):
+                if a.lower().endswith(".zip"):
+                    try:
+                        yield a, zipfile.ZipFile(os.path.join(raiz, a))
+                    except zipfile.BadZipFile:
+                        log(f"  ✗ ZIP dañado, lo salteo: {a}")
+        return
     externo = zipfile.ZipFile(path_zip)
     nombres = externo.namelist()
     internos = [n for n in nombres if n.lower().endswith(".zip")]
@@ -438,7 +499,7 @@ def main():
     ap.add_argument("--provincia", help="código ISO, ej. AR-C (CABA), AR-B (Bs. As.), AR-X (Córdoba)")
     ap.add_argument("--nombre", default="Mi zona", help="nombre de la zona para mostrar en la app")
     ap.add_argument("--fecha", help="AAAA-MM-DD (default hoy)")
-    ap.add_argument("--zip", help="usar un ZIP SEPA ya descargado en vez de bajarlo")
+    ap.add_argument("--zip", help="usar un ZIP SEPA (o carpeta descomprimida) ya descargado en vez de bajarlo")
     ap.add_argument("--cache", default="sepa_cache", help="carpeta donde se guardan los ZIP")
     ap.add_argument("--salida", default=".", help="carpeta del JSON de salida")
     ap.add_argument("--cobertura", type=float, default=0.3,
@@ -460,7 +521,7 @@ def main():
     if args.zip:
         path_zip, fecha_dato = args.zip, fecha.isoformat()
     else:
-        path_zip, fecha_dato = descargar(elegir_recurso(fecha), args.cache)
+        path_zip, fecha_dato = obtener_sepa(fecha, args.cache)
 
     t0 = time.time()
     cadenas, sucursales, productos, filas = procesar(path_zip, fecha_dato, args)

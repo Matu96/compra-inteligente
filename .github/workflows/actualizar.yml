@@ -33,10 +33,13 @@ jobs:
 
       - name: Bajar SEPA y generar datos por zona
         env:
-          # Si datos.produccion.gob.ar bloquea a los servidores de GitHub, cargá un proxy argentino
-          # en Settings → Secrets → Actions → SEPA_PROXY (ej. http://usuario:clave@host:puerto).
+          # datos.produccion.gob.ar bloquea a los servidores de GitHub: el script usa entonces la copia
+          # diaria del espejo público de preciazo. Opcional: un proxy argentino en
+          # Settings → Secrets → Actions → SEPA_PROXY (ej. http://usuario:clave@host:puerto) para bajar del sitio oficial.
           HTTPS_PROXY: ${{ secrets.SEPA_PROXY }}
-        run: python pipeline/build_tiles.py --salida public/data
+        run: |
+          command -v zstd || (sudo apt-get update -q && sudo apt-get install -y -q zstd)
+          python pipeline/build_tiles.py --salida public/data
 
       - name: Armar el sitio
         run: |
