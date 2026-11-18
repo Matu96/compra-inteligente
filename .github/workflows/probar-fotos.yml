@@ -1,4 +1,4 @@
-name: Probar fotos (Open Food Facts)
+name: Probar fotos
 on:
   workflow_dispatch:
     inputs:
@@ -7,12 +7,23 @@ jobs:
   probar:
     runs-on: ubuntu-latest
     steps:
-      - name: Consultar
+      - name: Precios Claros
         run: |
-          UA="CompraInteligente/1.0 (github.com/Matu96/compra-inteligente)"
-          echo "== búsqueda múltiple"; curl -sS -A "$UA" -w "\nHTTP %{http_code}\n" "https://world.openfoodfacts.org/api/v2/search?code=${{ inputs.eans }}&fields=code,product_name,brands,image_front_small_url&page_size=100" | head -c 1500; echo
-          echo "== de a uno"
+          mkdir -p fotos
           for e in $(echo "${{ inputs.eans }}" | tr ',' ' '); do
-            curl -sS -A "$UA" "https://world.openfoodfacts.org/api/v2/product/$e.json?fields=code,product_name,brands,image_front_small_url" | head -c 300; echo; sleep 1
+            code=$(curl -sS -A "Mozilla/5.0" -o fotos/$e.jpg -w "%{http_code} %{content_type} %{size_download}" "https://imagenes.preciosclaros.gob.ar/productos/$e.jpg" || echo "fallo")
+            echo "$e -> $code"
           done
-          echo "== CORS"; curl -sS -A "$UA" -D - -o /dev/null -H "Origin: https://matu96.github.io" "https://world.openfoodfacts.org/api/v2/product/7790387013610.json?fields=code" | grep -i "access-control\|^HTTP"
+          python3 -c "
+          import glob
+          from PIL import Image
+          for f in sorted(glob.glob('fotos/*.jpg')):
+              try: im=Image.open(f); print(f, im.size, im.mode)
+              except Exception as e: print(f, 'no es imagen', e)" 2>/dev/null || pip install pillow -q && python3 -c "
+          import glob
+          from PIL import Image
+          for f in sorted(glob.glob('fotos/*.jpg')):
+              try: im=Image.open(f); print(f, im.size, im.mode)
+              except Exception as e: print(f, 'no es imagen', e)"
+      - uses: actions/upload-artifact@v4
+        with: { name: fotos, path: fotos }
