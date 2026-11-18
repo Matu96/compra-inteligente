@@ -72,6 +72,23 @@ export function fechaDelDia(dia, hoy = new Date()) {
   return d.toISOString().slice(0, 10);
 }
 
+/** ¿El producto está excluido de la promo bancaria? pr.excluye = {palabras: [regex], marcas: [texto], salvo: [regex]} */
+const _norm = s => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const _re = new Map();
+const _rx = src => { if (!_re.has(src)) _re.set(src, new RegExp(src, 'i')); return _re.get(src); };
+export function excluida(pr, info) {
+  const ex = pr.excluye;
+  if (!ex || !info) return false;
+  const txt = _norm(`${info.nombre} ${info.tipo || ''}`), marca = _norm(info.marca);
+  if ((ex.salvo || []).some(r => _rx(r).test(txt))) return false;
+  if ((ex.marcas || []).some(m => marca.includes(_norm(m)) || txt.includes(_norm(m)))) return true;
+  return (ex.palabras || []).some(r => _rx(r).test(txt));
+}
+/** Líneas sobre las que se calcula la promo: sin las excluidas y, si no es acumulable, sin las que tienen oferta del súper. */
+function lineasConPromo(pr, lineas, info) {
+  return lineas.filter(l => l.p !== null && !(pr.acumulable === false && l.aplica) && !excluida(pr, info?.(l.ean)));
+}
+
 function promoVigente(pr, cad, dia, fecha, medios) {
   return pr.cad === cad && pr.dias.includes(dia) && medios.has(pr.medio) &&
     (!pr.desde || fecha >= pr.desde) && (!pr.hasta || fecha <= pr.hasta);
@@ -109,14 +126,26 @@ export function cotizar(store, lista, getFila, ctx) {
     }
     if (sub < (pr.min || 0)) { casi.push({ ...pr, falta: pr.min - sub }); continue; }
     // acumulable (default): el % se aplica sobre el total ya con las ofertas del súper (doble descuento).
-    // acumulable: false → solo sobre los productos que no tienen oferta aplicada.
-    const base = pr.acumulable === false ? lineas.reduce((a, l) => a + (l.p !== null && !l.aplica ? l.total : 0), 0) : sub;
+    // acumulable: false → solo sobre los productos que no tienen oferta aplicada. Siempre sin los productos excluidos.
+    const base = lineasConPromo(pr, lineas, ctx.info).reduce((a, l) => a + l.total, 0);
     const bruto = base * pr.pct;
     const d = pr.tope == null ? bruto : Math.min(bruto, pr.tope);
-    if (d > pago.desc) pago = { medio: pr.medio, desc: d, nota: pr.nota, topeado: pr.tope != null && bruto > pr.tope };
+    if (d > pago.desc) pago = { medio: pr.medio, desc: d, nota: pr.nota, topeado: pr.tope != null && bruto > pr.tope, pr, base };
+  }
+  // qué productos quedaron afuera del descuento del medio de pago elegido, y por qué
+  if (pago.pr) {
+    const dentro = new Set(lineasConPromo(pago.pr, lineas, ctx.info));
+    for (const l of lineas) if (l.p !== null && !dentro.has(l))
+      l.sinPago = pago.pr.acumulable === false && l.aplica ? 'oferta' : 'excluido';
+    pago.enOferta = lineas.filter(l => l.sinPago === 'oferta').length;
+    pago.excluidos = lineas.filter(l => l.sinPago === 'excluido').length;
   }
   // cuánto descontaría cada promo que no se aplicó (por mínimo o por medio no marcado), si se cumpliera
-  const potencial = pr => { const base = Math.max(sub, pr.min || 0); const b = base * pr.pct; return pr.tope == null ? b : Math.min(b, pr.tope); };
+  const potencial = pr => {
+    const elegible = lineasConPromo(pr, lineas, ctx.info).reduce((a, l) => a + l.total, 0);
+    const base = elegible + Math.max(0, (pr.min || 0) - sub);       // lo que falte para el mínimo, si se compra algo elegible
+    const b = base * pr.pct; return pr.tope == null ? b : Math.min(b, pr.tope);
+  };
   casi.forEach(c => { c.desc = potencial(c); c.totalSiLlega = (sub + c.falta) - c.desc; });
   otrosMedios.forEach(o => { o.descHoy = sub >= (o.min || 0) ? potencial(o) : 0; o.falta = Math.max(0, (o.min || 0) - sub); });
   return { store, sub, promoSuper: sinPromo - sub, pago, total: sub - pago.desc, faltan, lineas, casi, otrosMedios };

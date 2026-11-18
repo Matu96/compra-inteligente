@@ -99,3 +99,29 @@ console.log('✔ motor: todas las pruebas pasaron');
   assert.equal(r4.otrosMedios.length, 1); assert.equal(r4.otrosMedios[0].descHoy, 520);
   console.log('✔ motor: dos ofertas + promo bancaria OK');
 }
+
+// Coto + Mercado Pago: no acumulable con ofertas y con productos excluidos
+{
+  const { excluida } = await import('../app/motor.js');
+  const promos = JSON.parse((await import('node:fs')).readFileSync(new URL('../app/promos.json', import.meta.url))).promos;
+  const pr = promos.find(p => p.cad === 'coto' && p.medio === 'mp' && p.dias.includes(5));
+  const info = { yerba: { nombre: 'YERBA MATE TARAGUI 1 KG', marca: 'TARAGUI', tipo: 'Yerba mate 1 kg' },
+    coca: { nombre: 'GASEOSA COCA COLA 2.25 L', marca: 'COCA COLA', tipo: 'Gaseosa cola 2,25 L' },
+    pollo: { nombre: 'POLLO ENTERO FRESCO', marca: '', tipo: 'Pollo entero 1 kg' },
+    caldo: { nombre: 'CALDO DE POLLO KNORR X12', marca: 'KNORR', tipo: 'Caldo pollo 114 g' },
+    vino: { nombre: 'VINO TINTO MALBEC 750 ML', marca: 'X', tipo: 'Vino tinto malbec 750 ml' },
+    aceite: { nombre: 'ACEITE GIRASOL NATURA 1.5 L', marca: 'NATURA', tipo: 'Aceite de girasol 1,5 L' } };
+  assert.equal(excluida(pr, info.yerba), false);
+  assert.equal(excluida(pr, info.coca), true);
+  assert.equal(excluida(pr, info.pollo), true);
+  assert.equal(excluida(pr, info.caldo), false);
+  assert.equal(excluida(pr, info.vino), true);
+  const L = [{ yerba: [4000], coca: [3000], aceite: [5000, 4000, { t: 'pct', v: 0.2 }, '20% off'] }];
+  const S = { id: 'c', cad: 'coto', lat: 0, lng: 0, lp: 0, listas: L, dif: {} };
+  const ctxC = { dia: 5, fecha: '2026-11-20', medios: new Set(['mp']), promos: [pr], info: e => info[e] };
+  const r = cotizar(S, [{ eans: ['yerba'], qty: 1 }, { eans: ['coca'], qty: 1 }, { eans: ['aceite'], qty: 1 }], getFila, ctxC);
+  assert.equal(r.sub, 11000);
+  assert.equal(r.pago.desc, 1000);                 // 25% solo sobre la yerba: la coca está excluida y el aceite ya tiene oferta
+  assert.equal(r.pago.enOferta, 1); assert.equal(r.pago.excluidos, 1);
+  console.log('✔ motor: Coto + Mercado Pago (no acumulable y exclusiones) OK');
+}

@@ -1,6 +1,6 @@
 {
   "actualizado": "2026-11-18",
-  "nota": "Promos bancarias y de billeteras por día. Editá este archivo cada mes. dias: 0=domingo … 6=sábado. tope: null = sin tope. cad: clave de cadena (dia, coto, carrefour, chango, jumbo, disco, vea, anonima, coope, josimar, nini, dar…). acumulable: false si el reintegro NO se suma a las ofertas del súper (default true: se aplica sobre el total ya con las ofertas).",
+  "nota": "Promos bancarias y de billeteras por día. Editá este archivo cada mes. dias: 0=domingo … 6=sábado. tope: null = sin tope. cad: clave de cadena (dia, coto, carrefour, chango, jumbo, disco, vea, anonima, coope, josimar, nini, dar…). acumulable: false si el reintegro NO se suma a las ofertas del súper (default true: se aplica sobre el total ya con las ofertas). excluye: {palabras: [regex], marcas: [texto], salvo: [regex]} = productos sin descuento por las bases de la promo.",
   "medios": [
     {
       "id": "cuentadni",
@@ -334,6 +334,85 @@
       "hasta": "2026-11-30",
       "nota": "Lun y jue 15% (solo CABA), sin tope",
       "fuente": "https://calcularsueldo.com.ar/?p=16411"
+    },
+    {
+      "cad": "coto",
+      "medio": "mp",
+      "dias": [
+        5
+      ],
+      "pct": 0.25,
+      "tope": null,
+      "min": 0,
+      "desde": "2026-11-01",
+      "hasta": "2026-11-30",
+      "acumulable": false,
+      "excluye": {
+        "palabras": [
+          "\\b(carnes?|novillo|novillito|ternera|vacuna|asado|vacio|matambre|nalga|cuadrada|peceto|bife|osobuco|falda|entrana|roast beef|carne picada|picada especial|menudencias?|pollo|pechugas?|suprema|muslos?|cerdo|bondiola|pechito|carre de cerdo|chorizos?|morcillas?|hamburguesas?)\\b",
+          "\\b(vinos?|espumantes?|champagne|champana|sidras?|cervezas?|fernet|whisky|whiskey|vodka|gin|ron|licor|aperitivo|vermut|vermouth|tequila|brandy|cognac|grappa|bebida alcoholica)\\b",
+          "\\b(televisor|smart tv|heladera|freezer|lavarropas|secarropas|microondas|aire acondicionado|ventilador|calefactor|licuadora|batidora|cafetera electrica|pava electrica|tostadora|plancha electrica|aspiradora|notebook|celular|tablet|horno electrico|anafe)\\b",
+          "\\b(neumaticos?|cubiertas?|bicicletas?|rodados?|monopatin)\\b"
+        ],
+        "marcas": [
+          "coca cola",
+          "coca-cola",
+          "sprite",
+          "fanta",
+          "aquarius",
+          "schweppes",
+          "powerade",
+          "cepita",
+          "del valle",
+          "ades",
+          "kin"
+        ],
+        "salvo": [
+          "\\b(caldo|sopa|saborizad\\w*|sabor a|alimento para|perros?|gatos?|pate|snacks?|galletitas?|vinagre|aceto|salsa|condimento|cuchillo|tabla)\\b"
+        ]
+      },
+      "nota": "Viernes 25% con QR, sin tope, en sucursales. No se suma a las ofertas; excluye carnes, alcohol, Coca-Cola y electro",
+      "fuente": "https://calcularsueldo.com.ar/?p=16359"
+    },
+    {
+      "cad": "coto",
+      "medio": "mp",
+      "dias": [
+        6,
+        0
+      ],
+      "pct": 0.2,
+      "tope": null,
+      "min": 0,
+      "desde": "2026-11-01",
+      "hasta": "2026-11-30",
+      "acumulable": false,
+      "excluye": {
+        "palabras": [
+          "\\b(carnes?|novillo|novillito|ternera|vacuna|asado|vacio|matambre|nalga|cuadrada|peceto|bife|osobuco|falda|entrana|roast beef|carne picada|picada especial|menudencias?|pollo|pechugas?|suprema|muslos?|cerdo|bondiola|pechito|carre de cerdo|chorizos?|morcillas?|hamburguesas?)\\b",
+          "\\b(vinos?|espumantes?|champagne|champana|sidras?|cervezas?|fernet|whisky|whiskey|vodka|gin|ron|licor|aperitivo|vermut|vermouth|tequila|brandy|cognac|grappa|bebida alcoholica)\\b",
+          "\\b(televisor|smart tv|heladera|freezer|lavarropas|secarropas|microondas|aire acondicionado|ventilador|calefactor|licuadora|batidora|cafetera electrica|pava electrica|tostadora|plancha electrica|aspiradora|notebook|celular|tablet|horno electrico|anafe)\\b",
+          "\\b(neumaticos?|cubiertas?|bicicletas?|rodados?|monopatin)\\b"
+        ],
+        "marcas": [
+          "coca cola",
+          "coca-cola",
+          "sprite",
+          "fanta",
+          "aquarius",
+          "schweppes",
+          "powerade",
+          "cepita",
+          "del valle",
+          "ades",
+          "kin"
+        ],
+        "salvo": [
+          "\\b(caldo|sopa|saborizad\\w*|sabor a|alimento para|perros?|gatos?|pate|snacks?|galletitas?|vinagre|aceto|salsa|condimento|cuchillo|tabla)\\b"
+        ]
+      },
+      "nota": "Sáb y dom 20% con QR, sin tope, en sucursales. No se suma a las ofertas; excluye carnes, alcohol, Coca-Cola y electro",
+      "fuente": "https://calcularsueldo.com.ar/?p=16359"
     }
   ]
 }

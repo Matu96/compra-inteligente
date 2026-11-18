@@ -43,7 +43,8 @@ let ultimo = null;                      // último resultado (para la barra de l
 
 const nombreCad = k => NOMBRES_CAD[k] || titulo(INDEX?.cadenas?.[k] || k);
 const nombreMedio = id => id === 'efectivo' ? 'efectivo o débito' : (PROMOS.medios.find(m => m.id === id)?.nombre || id);
-const ctxDe = dia => ({ dia, fecha: fechaDelDia(dia), medios: new Set(['efectivo', ...estado.medios]), promos: PROMOS.promos });
+const infoProd = ean => { const p = POR_EAN.get(ean); return p && { nombre: p[1], marca: p[2], tipo: TIPOS[p[4]] }; };
+const ctxDe = dia => ({ dia, fecha: fechaDelDia(dia), medios: new Set(['efectivo', ...estado.medios]), promos: PROMOS.promos, info: infoProd });
 
 function getFila(store, ean) {
   if (store.dif && Object.prototype.hasOwnProperty.call(store.dif, ean)) return store.dif[ean];
@@ -305,7 +306,7 @@ function lineasTicket(r) {
     ? `<div class="tl falta">${foto(eansFoto(TIPO_IDX.get(l.it.tipo), l.it.marcas))}<span class="n">${esc(l.it.tipo)}</span><span class="t">—</span><span class="d">${l.it.marcas.length ? 'No tiene la marca que elegiste' : 'No lo tiene'}</span></div>`
     : `<div class="tl">${foto([l.ean])}<span class="n">${esc(l.it.tipo)}</span><span class="t">${fmt(l.total)}</span>
         <span class="d">${esc(titulo(POR_EAN.get(l.ean)?.[1] || ''))}</span>
-        <span class="d">${l.it.qty} × ${fmt(l.unit)}${l.aplica && Math.round(l.unit) < Math.round(l.p) ? ` <span class="tachado">${fmt(l.p)}</span>` : ''}${l.promo ? ` <span class="of">${esc(l.promo)}</span>` : ''}</span></div>`).join('');
+        <span class="d">${l.it.qty} × ${fmt(l.unit)}${l.aplica && Math.round(l.unit) < Math.round(l.p) ? ` <span class="tachado">${fmt(l.p)}</span>` : ''}${l.promo ? ` <span class="of">${esc(l.promo)}</span>` : ''}${l.sinPago ? ` <span class="sinpago">${l.sinPago === 'oferta' ? 'Sin descuento por pago: ya tiene oferta' : 'Excluido de la promo de pago'}</span>` : ''}</span></div>`).join('');
 }
 
 function renderAhorro() {
@@ -347,7 +348,7 @@ function renderAhorro() {
     <div class="ticket-lineas">${lineasTicket(top)}</div>
     <div class="ticket-sum">
       ${top.promoSuper > 0 ? `<div class="ts"><span>Sin ofertas</span><span>${fmt(top.sub + top.promoSuper)}</span></div><div class="ts desc"><span>Ofertas del súper</span><span>−${fmt(top.promoSuper)}</span></div>` : ''}
-      ${top.pago.desc ? `<div class="ts desc"><span>Pagando con ${esc(nombreMedio(top.pago.medio))}<small>${esc(top.pago.nota)}${top.promoSuper > 0 ? '. Se suma a las ofertas del súper' : ''}${top.pago.topeado ? '. Llega al tope' : ''}</small></span><span>−${fmt(top.pago.desc)}</span></div>`
+      ${top.pago.desc ? `<div class="ts desc"><span>Pagando con ${esc(nombreMedio(top.pago.medio))}<small>${esc(top.pago.nota)}${top.promoSuper > 0 && top.pago.pr?.acumulable !== false ? '. Se suma a las ofertas del súper' : ''}${top.pago.enOferta || top.pago.excluidos ? `. Se aplica sobre ${fmt(top.pago.base)}: quedan afuera ${[top.pago.enOferta ? `${top.pago.enOferta} con oferta del súper (no es acumulable)` : '', top.pago.excluidos ? `${top.pago.excluidos} excluido${top.pago.excluidos > 1 ? 's' : ''} por las bases` : ''].filter(Boolean).join(' y ')}` : ''}${top.pago.topeado ? '. Llega al tope' : ''}</small></span><span>−${fmt(top.pago.desc)}</span></div>`
         : `<div class="ts"><span>Pago<small>${top.casi.length ? `${esc(nombreMedio(top.casi[0].medio))} no se aplica: pide una compra mínima de ${fmt(top.casi[0].min)}` : `Ninguno de tus medios tiene promo acá ${cuando}`}</small></span><span>$0</span></div>`}
       <div class="ticket-total"><span>Total ${cuando}</span><b>${fmt(top.total)}</b></div>
       ${top.faltan.length ? `<p class="aviso-faltan">Ningún súper cercano tiene toda la lista. Acá faltan ${top.faltan.length}.</p>` : ''}
