@@ -4,7 +4,7 @@ build_tiles.py — Genera los datos estáticos que consume la app a partir de la
 
 Salida (carpeta --salida, por defecto public/data):
   index.json            fecha del dato, tamaño de cuadrícula y lista de cuadrículas con sucursales
-  catalogo.json         productos comparables (EAN, nombre, marca, presentación), ordenados por popularidad
+  catalogo.json         {tipos: [producto genérico], productos: [[EAN, nombre, marca, presentación, índice de tipo]]}
   tiles/<lat>_<lng>.json  sucursales de esa cuadrícula + listas de precios por cadena
 
 Cuadrícula: celdas de 0,1° (~11 x 9 km). La app baja la celda donde está la persona y las vecinas.
@@ -22,7 +22,7 @@ from datetime import date, datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sepa_import import (elegir_recurso, descargar, iterar_comercios, buscar, leer_csv, num,
-                         parsear_promo, clave_cadena, log)
+                         parsear_promo, clave_cadena, tipo_de, log)
 
 TAM = 0.1
 
@@ -81,10 +81,12 @@ def pasada1(path_zip, args, tmp):
             if not ean or not lista or len(ean) < 7:
                 continue
             if ean not in productos:
-                cant = p.get("productos_cantidad_presentacion", "").strip()
-                cant = cant.rstrip("0").rstrip(".") if "." in cant else cant
-                productos[ean] = [p.get("productos_descripcion", "").strip(), p.get("productos_marca", "").strip(),
-                                  f"{cant} {p.get('productos_unidad_medida_presentacion', '').strip()}".strip()]
+                cant = num(p.get("productos_cantidad_presentacion", ""))
+                pres = f"{cant:g} {p.get('productos_unidad_medida_presentacion', '').strip()}".strip() if cant else \
+                       p.get("productos_unidad_medida_presentacion", "").strip()
+                desc, marca = p.get("productos_descripcion", "").strip(), p.get("productos_marca", "").strip()
+                tipo, tipo_nombre = tipo_de(desc, marca, pres)
+                productos[ean] = [desc, marca, pres, tipo, tipo_nombre]
             mejor, ley = 0, ""
             for i in ("1", "2"):
                 pu = num(p.get(f"productos_precio_unitario_promo{i}"))
@@ -106,22 +108,28 @@ def leer_celda(tmp, c):
             yield sid, ean, float(lista), float(promo), ley
 
 
-def armar_catalogo(tmp, celdas, args):
-    """Unión, por celda, de los productos que están en buena parte de sus sucursales."""
-    popularidad = Counter()
+def armar_catalogo(tmp, celdas, productos, args):
+    """Por celda: entran los productos genéricos (tipo) presentes en buena parte de las sucursales,
+    con TODAS sus marcas (también las baratas o propias que tienen pocas sucursales)."""
+    pop_ean, pop_tipo = Counter(), Counter()
     elegidos = set()
     for c in celdas:
         pres = defaultdict(set)
         for sid, ean, *_ in leer_celda(tmp, c):
             pres[ean].add(sid)
-        n = len({s for v in pres.values() for s in v}) or 1
-        top = sorted(pres.items(), key=lambda kv: -len(kv[1]))
-        for ean, ss in top[: args.max_por_celda]:
-            if len(ss) / n >= args.cobertura or len(ss) >= args.min_sucursales:
-                elegidos.add(ean)
+        suc_tipo = defaultdict(set)
         for ean, ss in pres.items():
-            popularidad[ean] += len(ss)
-    return elegidos, popularidad
+            suc_tipo[productos[ean][3]] |= ss
+        n = len(set().union(*pres.values())) or 1
+        tipos_ok = {t for t, ss in suc_tipo.items() if len(ss) / n >= args.cobertura or len(ss) >= args.min_sucursales}
+        cand = sorted((e for e in pres if productos[e][3] in tipos_ok),
+                      key=lambda e: (-len(suc_tipo[productos[e][3]]), -len(pres[e])))
+        elegidos.update(cand[: args.max_por_celda])
+        for ean, ss in pres.items():
+            pop_ean[ean] += len(ss)
+        for t, ss in suc_tipo.items():
+            pop_tipo[t] += len(ss)
+    return elegidos, pop_ean, pop_tipo
 
 
 def fila_json(lista, promo, ley, cache_spec):
@@ -181,9 +189,9 @@ def main():
     ap.add_argument("--cache", default="sepa_cache")
     ap.add_argument("--salida", default="public/data")
     ap.add_argument("--provincia", help="limitar a una provincia (AR-C, AR-B, …) para pruebas")
-    ap.add_argument("--cobertura", type=float, default=0.25, help="presencia mínima en las sucursales de la celda")
+    ap.add_argument("--cobertura", type=float, default=0.25, help="presencia mínima del producto genérico (cualquier marca) en las sucursales de la celda")
     ap.add_argument("--min-sucursales", type=int, default=15, help="…o presente en al menos N sucursales de la celda")
-    ap.add_argument("--max-por-celda", type=int, default=2500)
+    ap.add_argument("--max-por-celda", type=int, default=8000, help="tope de variantes (EAN) por celda")
     ap.add_argument("--min-productos", type=int, default=80, help="sucursales con menos productos del catálogo se descartan")
     args = ap.parse_args()
 
@@ -203,8 +211,8 @@ def main():
             log("No se encontraron precios. ¿El ZIP está vacío o cambió el formato?")
             sys.exit(1)
         log(f"Pasada 2: catálogo sobre {len(celdas)} celdas…")
-        catalogo, popularidad = armar_catalogo(tmp, celdas, args)
-        log(f"  {len(catalogo):,} productos comparables")
+        catalogo, popularidad, pop_tipo = armar_catalogo(tmp, celdas, productos, args)
+        log(f"  {len({productos[e][3] for e in catalogo}):,} productos genéricos · {len(catalogo):,} variantes/marcas")
 
         if os.path.exists(os.path.join(args.salida, "tiles")):
             shutil.rmtree(os.path.join(args.salida, "tiles"))
@@ -220,14 +228,20 @@ def main():
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
-    cat = sorted(catalogo, key=lambda e: -popularidad[e])
+    # catálogo: tipos (producto genérico) por popularidad y, dentro de cada uno, sus variantes/marcas
+    tipos = sorted({productos[e][3] for e in catalogo}, key=lambda t: -pop_tipo[t])
+    t_idx = {t: i for i, t in enumerate(tipos)}
+    nombre_tipo = {productos[e][3]: productos[e][4] for e in catalogo}
+    cat = sorted(catalogo, key=lambda e: (t_idx[productos[e][3]], -popularidad[e]))
     with open(os.path.join(args.salida, "catalogo.json"), "w", encoding="utf-8") as f:
-        json.dump([[e] + productos[e] for e in cat], f, ensure_ascii=False, separators=(",", ":"))
+        json.dump({"tipos": [nombre_tipo[t] for t in tipos],
+                   "productos": [[e, productos[e][0], productos[e][1], productos[e][2], t_idx[productos[e][3]]] for e in cat]},
+                  f, ensure_ascii=False, separators=(",", ":"))
     with open(os.path.join(args.salida, "index.json"), "w", encoding="utf-8") as f:
         json.dump({"fecha": fecha_dato, "generado": datetime.now().isoformat(timespec="seconds"),
                    "fuente": "SEPA - Precios Claros (Secretaría de Comercio), CC-BY 4.0",
                    "tam": TAM, "celdas": indice, "cadenas": nombres_cad,
-                   "sucursales": total_s, "productos": len(cat)}, f, ensure_ascii=False, separators=(",", ":"))
+                   "sucursales": total_s, "productos": len(cat), "tipos": len(tipos)}, f, ensure_ascii=False, separators=(",", ":"))
     peso = sum(os.path.getsize(os.path.join(dp, fn)) for dp, _, fns in os.walk(args.salida) for fn in fns)
     log(f"✔ {len(indice)} celdas · {total_s:,} sucursales · {len(cat):,} productos · {total_p:,} registros · "
         f"{peso/1e6:.0f} MB · {time.time()-t0:.0f}s")

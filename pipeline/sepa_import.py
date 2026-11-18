@@ -16,6 +16,10 @@ Ejemplos:
   python3 sepa_import.py --zip sepa_lunes.zip --lat -34.64 --lng -58.56 --radio 4 --sqlite sepa.db
 
 Salida: compra_inteligente_<fecha>.json  → se carga en el prototipo con "Cargar datos reales".
+
+Marcas: cada producto lleva "tipo" (producto genérico = descripción sin la marca + presentación),
+así la app puede ofrecer "elegir marca" o "cualquier marca, la más barata". El filtro de cobertura
+se aplica por tipo (no por EAN) para no perder las marcas baratas que tienen menos sucursales.
 """
 import argparse, csv, io, json, math, os, re, sqlite3, sys, time, unicodedata, urllib.request, zipfile
 from collections import Counter, defaultdict
@@ -68,6 +72,107 @@ def clave_cadena(bandera):
     if re.search(r"\bdia\b", s):
         return "dia"
     return re.sub(r"[^a-z0-9]+", "-", s).strip("-") or "otro"
+
+
+# ---------------------------------------------------------------- producto genérico (para elegir marca)
+_UNIDADES = r"(kg|kgs|g|gr|grs|grm|l|lt|lts|ltr|ml|cc|cm3|un|u|uni|unid|unidades)"
+
+# Reglas de producto genérico: la primera que matchea gana. {1}/{2} = grupos capturados.
+# Así "Yerba Mate Canarias Serena 1 Kg" y "Yerba Playadito Suave 1 Kg" caen juntas en "Yerba mate 1 kg".
+REGLAS_TIPO = [
+    (r"\byerba\b.*\b(compuesta|hierbas|saborizada|sabor|naranja|limon|menta|boldo|cedron|burrito)\b", "Yerba compuesta o saborizada"),
+    (r"\byerba\b", "Yerba mate"),
+    (r"\bdulce de leche\b", "Dulce de leche"),
+    (r"\bleche\b.*\ben polvo\b", "Leche en polvo"),
+    (r"\bleche\b.*\b(descremada|parcialmente descremada)\b", "Leche descremada"),
+    (r"\bleche\b.*\bentera\b", "Leche entera"),
+    (r"\byogur\w*\b.*\bbebible\b", "Yogur bebible"),
+    (r"\byogur\w*\b", "Yogur"),
+    (r"\bmanteca\b", "Manteca"),
+    (r"\bqueso\b.*\b(cremoso|rallado|untable|cuartirolo|tybo|barra|en fetas)\b", "Queso {1}"),
+    (r"\bfideos?\b.*\b(tirabuzon|spaghetti|tallarin\w*|mostachol\w*|codito\w*|monito\w*|municion|cinta\w*|fusilli|penne|rigatti|vermicelli|nido\w*)\b", "Fideos {1}"),
+    (r"\b(fideos?|spaghetti|tallarin\w*)\b", "Fideos"),
+    (r"\barroz\b.*\b(largo fino|doble carolina|integral|parboil\w*|yamani|blanco)\b", "Arroz {1}"),
+    (r"\barroz\b", "Arroz"),
+    (r"\baceite\b.*\b(girasol|maiz|oliva|mezcla|canola|soja)\b", "Aceite de {1}"),
+    (r"\bazucar\b", "Azúcar"),
+    (r"\bharina\b.*\b(0000|000|leudante|integral|de maiz)\b", "Harina {1}"),
+    (r"\bcafe\b.*\b(molido|instantaneo|en grano|torrado|capsulas)\b", "Café {1}"),
+    (r"\b(gaseosa|bebida)\b.*\bcola\b|\bcoca.?cola\b|\bpepsi\b", "Gaseosa cola"),
+    (r"\bgaseosa\b.*\b(lima limon|lima|limon|naranja|pomelo|tonica)\b", "Gaseosa {1}"),
+    (r"\bagua\b.*\b(con gas|gasificada|soda)\b", "Agua con gas"),
+    (r"\bagua\b.*\b(mineral|mineralizada|sin gas)\b", "Agua sin gas"),
+    (r"\bcerveza\b", "Cerveza"),
+    (r"\bdetergente\b", "Detergente"),
+    (r"\blavandina\b", "Lavandina"),
+    (r"\bpapel higienico\b", "Papel higiénico"),
+    (r"\brollo de cocina\b", "Rollo de cocina"),
+    (r"\bjabon\b.*\bpolvo\b", "Jabón en polvo"),
+    (r"\bjabon\b.*\bliquido\b", "Jabón líquido"),
+    (r"\bsuavizante\b", "Suavizante"),
+    (r"\bpan\b.*\b(lactal|de molde|blanco)\b", "Pan lactal"),
+    (r"\bgalletitas?\b.*\b(agua|crackers)\b", "Galletitas de agua"),
+    (r"\b(tomate|pure de tomate)\b.*\b(triturado|pure|perita|entero)\b", "Tomate {2}"),
+    (r"\bhuevos?\b", "Huevos"),
+    (r"\bmayonesa\b", "Mayonesa"),
+    (r"\batun\b", "Atún"),
+    (r"\bshampoo\b", "Shampoo"),
+    (r"\b(pasta|crema) dental\b", "Pasta dental"),
+]
+_TILDES = {"tirabuzon": "tirabuzón", "tallarin": "tallarín", "tallarines": "tallarines", "municion": "munición",
+           "monito": "moñito", "monitos": "moñitos", "maiz": "maíz", "de maiz": "de maíz", "instantaneo": "instantáneo",
+           "limon": "limón", "lima limon": "lima limón", "tonica": "tónica", "pure": "puré", "yamani": "yamaní"}
+
+def presentacion_canonica(presentacion):
+    """'1.00 kg' / '1000 gr' → ('1000g', '1 kg'). Permite agrupar la misma presentación aunque esté escrita distinto."""
+    m = re.search(r"([\d.,]+)\s*([a-z0-9]+)", sin_tildes(presentacion))
+    if not m:
+        return sin_tildes(presentacion).strip(), ""
+    try:
+        v = float(m.group(1).replace(",", "."))
+    except ValueError:
+        return sin_tildes(presentacion).strip(), presentacion.strip()
+    u = m.group(2)
+    if u in ("kg", "kgs", "kilo", "kilos"):
+        v, u = v * 1000, "g"
+    elif u in ("g", "gr", "grs", "grm", "gramos"):
+        u = "g"
+    elif u in ("l", "lt", "lts", "ltr", "litro", "litros"):
+        v, u = v * 1000, "ml"
+    elif u in ("ml", "cc", "cm3"):
+        u = "ml"
+    elif u in ("un", "u", "uni", "unid", "unidad", "unidades"):
+        u = "u"
+    v = round(v)
+    if u == "g":
+        vis = f"{v/1000:g} kg" if v >= 1000 else f"{v} g"
+    elif u == "ml":
+        vis = f"{v/1000:g} L".replace(".", ",") if v >= 1000 else f"{v} ml"
+    elif u == "u":
+        vis = f"x{v}"
+    else:
+        vis = f"{v} {u}"
+    return f"{v}{u}", vis
+
+def tipo_de(nombre, marca, presentacion):
+    """'Yerba Mate Canarias Serena 1 Kg' + 'CANARIAS' + '1 kg' → ('yerba mate|1000g', 'Yerba mate 1 kg').
+    Primero prueba las reglas curadas; si ninguna aplica, usa la descripción sin la marca ni cantidades."""
+    s = " " + re.sub(r"[^a-z0-9%]+", " ", sin_tildes(nombre)) + " "
+    clave_pres, vis_pres = presentacion_canonica(presentacion)
+    for patron, plantilla in REGLAS_TIPO:
+        m = re.search(patron, s)
+        if m:
+            gen = re.sub(r"\{(\d)\}", lambda g: _TILDES.get(m.group(int(g.group(1))) or "", m.group(int(g.group(1))) or ""), plantilla)
+            return f"{sin_tildes(gen)}|{clave_pres}", f"{gen} {vis_pres}".strip()
+    d = s
+    for w in re.split(r"[^a-z0-9]+", sin_tildes(marca)):
+        if len(w) > 1:
+            d = d.replace(" " + w + " ", " ")
+    d = re.sub(r" \d+([.,]\d+)? ?" + _UNIDADES + r"(?= )", " ", d)
+    d = re.sub(r" x ?\d+(?= )", " ", d)
+    d = re.sub(r"\s+", " ", d).strip()
+    visible = (d[:1].upper() + d[1:]) if d else nombre.strip()
+    return f"{d}|{clave_pres}", f"{visible} {vis_pres}".strip()
 
 
 # ---------------------------------------------------------------- promos del súper
@@ -235,9 +340,13 @@ def procesar(path_zip, fecha, args):
             if not ean or not lista:
                 continue
             if ean not in productos:
-                pres = f"{p.get('productos_cantidad_presentacion','').rstrip('0').rstrip('.')} {p.get('productos_unidad_medida_presentacion','')}".strip()
-                productos[ean] = {"ean": ean, "nombre": p.get("productos_descripcion", "").strip(),
-                                  "marca": p.get("productos_marca", "").strip(), "presentacion": pres}
+                cant = num(p.get("productos_cantidad_presentacion", ""))
+                pres = f"{cant:g} {p.get('productos_unidad_medida_presentacion','')}".strip() if cant else \
+                       p.get("productos_unidad_medida_presentacion", "").strip()
+                desc, marca = p.get("productos_descripcion", "").strip(), p.get("productos_marca", "").strip()
+                tipo, tipo_nombre = tipo_de(desc, marca, pres)
+                productos[ean] = {"ean": ean, "nombre": desc, "marca": marca, "presentacion": pres,
+                                  "tipo": tipo, "tipo_nombre": tipo_nombre}
             promos = []
             for i in ("1", "2"):
                 pu, ley = num(p.get(f"productos_precio_unitario_promo{i}")), p.get(f"productos_leyenda_promo{i}", "").strip()
@@ -248,15 +357,25 @@ def procesar(path_zip, fecha, args):
     log(f"Comercios leídos: {n_com} · sucursales en zona: {len(sucursales)} · filas de precio: {len(filas):,}")
     return cadenas, sucursales, productos, filas
 
-def elegir_productos(sucursales, filas, args):
-    """Para la app no mandamos todo: productos presentes en buena parte de las sucursales (los comparables)."""
-    presencia = Counter(ean for _, ean, _, _ in filas)
+def elegir_productos(sucursales, productos, filas, args):
+    """Para la app no mandamos todo. La cobertura se mide por producto genérico (tipo): si 'yerba 1 kg'
+    está en ≥30% de las sucursales, entran todas sus marcas con presencia mínima (--min-marca),
+    incluidas las marcas propias y las baratas que solo tienen algunas cadenas."""
     n = max(len(sucursales), 1)
-    forzados = set()
+    presencia = Counter(ean for _, ean, _, _ in filas)
+    suc_por_tipo = defaultdict(set)
+    for sid, ean, _, _ in filas:
+        suc_por_tipo[productos[ean]["tipo"]].add(sid)
+    tipos_ok = {t for t, s in suc_por_tipo.items() if len(s) / n >= args.cobertura}
+    candidatos = [e for e in presencia
+                  if productos[e]["tipo"] in tipos_ok and presencia[e] / n >= args.min_marca]
+    candidatos.sort(key=lambda e: (-len(suc_por_tipo[productos[e]["tipo"]]), -presencia[e]))
+    elegidos = set(candidatos[: args.max_productos])
     if args.catalogo and os.path.exists(args.catalogo):
         forzados = {l.strip().lstrip("0") for l in open(args.catalogo, encoding="utf-8") if l.strip() and not l.startswith("#")}
-    elegidos = [e for e, c in presencia.most_common() if c / n >= args.cobertura][: args.max_productos]
-    return set(elegidos) | (forzados & set(presencia))
+        elegidos |= forzados & set(presencia)
+    log(f"Productos genéricos: {len({productos[e]['tipo'] for e in elegidos})} · variantes/marcas: {len(elegidos)}")
+    return elegidos
 
 def guardar_sqlite(path, fecha, cadenas, sucursales, productos, filas):
     if os.path.dirname(path):
@@ -265,16 +384,22 @@ def guardar_sqlite(path, fecha, cadenas, sucursales, productos, filas):
     db.executescript("""
     CREATE TABLE IF NOT EXISTS sucursal(id TEXT PRIMARY KEY, cadena TEXT, bandera TEXT, nombre TEXT, direccion TEXT,
         localidad TEXT, provincia TEXT, lat REAL, lng REAL);
-    CREATE TABLE IF NOT EXISTS producto(ean TEXT PRIMARY KEY, nombre TEXT, marca TEXT, presentacion TEXT);
+    CREATE TABLE IF NOT EXISTS producto(ean TEXT PRIMARY KEY, nombre TEXT, marca TEXT, presentacion TEXT,
+        tipo TEXT, tipo_nombre TEXT);
     CREATE TABLE IF NOT EXISTS precio(fecha TEXT, sucursal_id TEXT, ean TEXT, precio_lista REAL, precio_promo REAL,
         leyenda_promo TEXT, promo_spec TEXT, PRIMARY KEY(fecha, sucursal_id, ean));
     CREATE INDEX IF NOT EXISTS ix_precio_ean ON precio(fecha, ean);
     """)
+    cols = {r[1] for r in db.execute("PRAGMA table_info(producto)")}
+    for c in ("tipo", "tipo_nombre"):          # bases creadas con la versión anterior
+        if c not in cols:
+            db.execute(f"ALTER TABLE producto ADD COLUMN {c} TEXT")
+    db.execute("CREATE INDEX IF NOT EXISTS ix_producto_tipo ON producto(tipo)")
     db.executemany("INSERT OR REPLACE INTO sucursal VALUES (?,?,?,?,?,?,?,?,?)",
                    [(s["id"], s["cad"], s["bandera"], s["nombre"], s["dir"], s["localidad"], s["provincia"], s["lat"], s["lng"])
                     for s in sucursales.values()])
-    db.executemany("INSERT OR REPLACE INTO producto VALUES (?,?,?,?)",
-                   [(p["ean"], p["nombre"], p["marca"], p["presentacion"]) for p in productos.values()])
+    db.executemany("INSERT OR REPLACE INTO producto(ean,nombre,marca,presentacion,tipo,tipo_nombre) VALUES (?,?,?,?,?,?)",
+                   [(p["ean"], p["nombre"], p["marca"], p["presentacion"], p["tipo"], p["tipo_nombre"]) for p in productos.values()])
     db.executemany("INSERT OR REPLACE INTO precio VALUES (?,?,?,?,?,?,?)",
                    [(fecha, sid, ean, lista, m and m["precio"], m and m["leyenda"], m and json.dumps(m["spec"]))
                     for sid, ean, lista, m in filas])
@@ -291,8 +416,11 @@ def main():
     ap.add_argument("--zip", help="usar un ZIP SEPA ya descargado en vez de bajarlo")
     ap.add_argument("--cache", default="sepa_cache", help="carpeta donde se guardan los ZIP")
     ap.add_argument("--salida", default=".", help="carpeta del JSON de salida")
-    ap.add_argument("--cobertura", type=float, default=0.3, help="mínimo %% de sucursales donde aparece el producto (0-1)")
-    ap.add_argument("--max-productos", type=int, default=1500)
+    ap.add_argument("--cobertura", type=float, default=0.3,
+                    help="mínimo %% de sucursales donde aparece el producto genérico (cualquier marca), 0-1")
+    ap.add_argument("--min-marca", type=float, default=0.0,
+                    help="mínimo %% de sucursales para incluir una marca/variante (default 0 = todas las marcas), 0-1")
+    ap.add_argument("--max-productos", type=int, default=15000, help="tope de variantes (EAN) en el JSON")
     ap.add_argument("--catalogo", help="archivo con EANs (uno por línea) que siempre se incluyen")
     ap.add_argument("--solo-super", action="store_true", help="excluir mayoristas/otros tipos de local")
     ap.add_argument("--sqlite", help="además guardar todo (sin filtrar productos) en esta base SQLite")
@@ -317,10 +445,10 @@ def main():
     if args.sqlite:
         guardar_sqlite(args.sqlite, fecha_dato, cadenas, sucursales, productos, filas)
 
-    elegidos = elegir_productos(sucursales, filas, args)
+    elegidos = elegir_productos(sucursales, productos, filas, args)
     sids = sorted(sucursales, key=lambda k: sucursales[k]["dist"])
     s_idx = {"-".join(k): i for i, k in enumerate(sids)}
-    p_list = sorted(elegidos, key=lambda e: productos[e]["nombre"])
+    p_list = sorted(elegidos, key=lambda e: (productos[e]["tipo_nombre"], productos[e]["marca"]))
     p_idx = {e: i for i, e in enumerate(p_list)}
     precios = []
     for sid, ean, lista, m in filas:
@@ -331,7 +459,7 @@ def main():
         "lat": sum(s["lat"] for s in sucursales.values()) / len(sucursales),
         "lng": sum(s["lng"] for s in sucursales.values()) / len(sucursales)}
     salida = {
-        "version": 1, "fuente": "SEPA - Precios Claros (datos.produccion.gob.ar), CC-BY 4.0",
+        "version": 2, "fuente": "SEPA - Precios Claros (datos.produccion.gob.ar), CC-BY 4.0",
         "fecha": fecha_dato, "generado": datetime.now().isoformat(timespec="seconds"),
         "zona": {"nombre": args.nombre, **centro, "radio_km": args.radio if args.lat is not None else None,
                  "provincia": args.provincia},

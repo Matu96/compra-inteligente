@@ -5,6 +5,8 @@ Web instalable (PWA) que, según **dónde estás**, busca los supermercados cerc
 - precios por sucursal y ofertas del súper (2x1, 3x2, 2da al X%, % off) de la base oficial **SEPA / Precios Claros**, actualizada todos los días;
 - promos bancarias y de billeteras por día (Cuenta DNI, Mercado Pago, MODO, bancos), con mínimos y topes.
 
+Cada producto de la lista es un **producto genérico** ("Yerba mate 1 kg") donde elegís **una o varias marcas** o **"cualquiera, la más barata"**: en cada súper se usa la variante que da el menor total con la oferta del súper aplicada a la cantidad (un 2x1 de una marca más cara puede ganar). Si tus marcas te encarecen la compra, te dice cuánto y lo podés cambiar con un toque.
+
 Además sugiere **qué día de la semana** conviene, si vale la pena **dividir la compra en dos súper**, y avisa cuando te falta poco para activar una promo.
 
 ## Cómo funciona
@@ -72,8 +74,8 @@ Pruebas del motor de cálculo: `node tests/motor.test.mjs`
 
 | Ruta | Qué es |
 |---|---|
-| `pipeline/sepa_import.py` | Descarga SEPA y lee sus CSV (tolera UTF-16, `;`, línea final "Última actualización") y parsea las leyendas de promo |
-| `pipeline/build_tiles.py` | Genera `index.json`, `catalogo.json` y `tiles/<celda>.json` (lista base por cadena + diferencias por sucursal) |
+| `pipeline/sepa_import.py` | Descarga SEPA, lee sus CSV (tolera UTF-16, `;`, línea final "Última actualización"), parsea leyendas de promo y agrupa productos genéricos (`tipo_de`) |
+| `pipeline/build_tiles.py` | Genera `index.json`, `catalogo.json` (productos genéricos + todas sus marcas) y `tiles/<celda>.json` (lista base por cadena + diferencias por sucursal) |
 | `app/motor.js` | Cálculo: ofertas por cantidad, mejor medio de pago con mínimo/tope/vigencia, ranking, compra dividida, mejor día |
 | `app/app.js` | Interfaz, GPS, búsqueda de dirección (OpenStreetMap), lista guardada en el teléfono |
 | `app/promos.json` | Promos bancarias del mes |
@@ -83,7 +85,8 @@ Pruebas del motor de cálculo: `node tests/motor.test.mjs`
 ## Limitaciones conocidas
 
 - Carne, verdura y fiambre se venden por peso y casi no tienen código de barras: no se comparan.
-- La búsqueda es por producto exacto (marca + presentación). Próximo paso: "la leche entera 1 L más barata de cualquier marca".
+- Los productos genéricos salen de ~40 reglas curadas (yerba, leche, fideos por forma, aceite por tipo…) y, para el resto, de la descripción sin la marca: algunas variedades pueden quedar separadas. Se amplían en `REGLAS_TIPO` de `pipeline/sepa_import.py`.
+- No compara presentaciones distintas (1 kg vs 500 g) por precio por kilo todavía.
 - Las ofertas del súper son las del último día publicado; para otro día de la semana se asumen iguales.
 - Topes de reintegro: se asumen sin usar (próximo paso: cargar cuánto ya usaste en el mes).
 

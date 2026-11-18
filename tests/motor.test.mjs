@@ -46,3 +46,17 @@ assert.equal(res[0].store.id, 'a');
 assert.equal(mejorDivision(res, lista, getFila, ctx), null);   // ahorro chico → no recomienda dividir
 
 console.log('✔ motor: todas las pruebas pasaron');
+
+// marcas: elige la variante con menor total de línea (con la oferta aplicada a la cantidad)
+{
+  const L = [{ m1: [1000], m2: [1100, 550, { t: 'nxm', n: 2, m: 1 }, '2x1'], m3: [900] }];
+  const S = { id: 's', cad: 'vea', lat: 0, lng: 0, lp: 0, listas: L, dif: { m3: null } };
+  const c1 = cotizar(S, [{ eans: ['m1', 'm2', 'm3'], qty: 2 }], getFila, { ...ctx, promos: [] });
+  assert.equal(c1.lineas[0].ean, 'm2');            // 2x1 de una marca más cara gana llevando 2
+  assert.equal(c1.total, 1100);
+  const c2 = cotizar(S, [{ eans: ['m1', 'm2'], qty: 1 }], getFila, { ...ctx, promos: [] });
+  assert.equal(c2.lineas[0].ean, 'm1');
+  const c3 = cotizar(S, [{ eans: ['m3'], qty: 1 }], getFila, { ...ctx, promos: [] });
+  assert.equal(c3.faltan.length, 1);               // la marca elegida no está en esa sucursal
+  console.log('✔ motor: marcas OK');
+}

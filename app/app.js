@@ -12,23 +12,40 @@ const NOMBRES_CAD = { dia: 'Día', coto: 'Coto', carrefour: 'Carrefour', chango:
 /* ------------------------------------------------------------ estado */
 const guardado = (() => { try { return JSON.parse(localStorage.getItem('ci') || '{}'); } catch { return {}; } })();
 const estado = {
-  lista: guardado.lista || [],                    // [{ean, qty, nombre, det}]
+  lista: (guardado.lista || []).filter(it => it.tipo),   // [{tipo: 'Yerba mate 1 kg', marcas: ['PLAYADITO'], qty}]
   medios: new Set(guardado.medios || ['cuentadni']),
   radio: guardado.radio || 3,
   ubic: guardado.ubic || null,                    // {lat, lng, label}
   dia: new Date().getDay(),
-  abiertos: new Set(), verTodos: false,
+  abiertos: new Set(), verTodos: false, marcaAbierta: null,
 };
 function guardar() {
-  try { localStorage.setItem('ci', JSON.stringify({ lista: estado.lista, medios: [...estado.medios], radio: estado.radio, ubic: estado.ubic, vioTipIOS: guardado.vioTipIOS })); } catch {}
+  const lista = estado.lista.map(({ tipo, marcas, qty }) => ({ tipo, marcas, qty }));
+  try { localStorage.setItem('ci', JSON.stringify({ lista, medios: [...estado.medios], radio: estado.radio, ubic: estado.ubic, vioTipIOS: guardado.vioTipIOS })); } catch {}
 }
 
-let INDEX = null, CATALOGO = [], CAT_NORM = [], PROMOS = { medios: [], promos: [] };
+let INDEX = null, PROMOS = { medios: [], promos: [] };
+// catálogo: TIPOS = productos genéricos; PROD = variantes [ean, nombre, marca, presentación, tipo]
+let TIPOS = [], TIPO_NORM = [], TIPO_IDX = new Map(), PROD = [], PROD_NORM = [], POR_TIPO = [], POR_EAN = new Map();
 const tiles = new Map();          // celda -> {sucursales, listas}
 let stores = [];
 
 const nombreCad = k => NOMBRES_CAD[k] || INDEX?.cadenas?.[k] || k;
 const nombreMedio = id => id === 'efectivo' ? 'efectivo o débito' : (PROMOS.medios.find(m => m.id === id)?.nombre || id);
+
+/** Marcas de un producto genérico, en orden de popularidad. */
+function marcasDe(ti) {
+  const vistas = new Set(), out = [];
+  for (const pi of POR_TIPO[ti]) { const m = PROD[pi][2] || 'Sin marca'; if (!vistas.has(m)) { vistas.add(m); out.push(m); } }
+  return out;
+}
+/** Ítem de la lista → ítem para el motor, con los EANs aceptados. */
+function paraMotor(it) {
+  const ti = TIPO_IDX.get(it.tipo);
+  const eans = POR_TIPO[ti].filter(pi => !it.marcas.length || it.marcas.includes(PROD[pi][2] || 'Sin marca')).map(pi => PROD[pi][0]);
+  return { ...it, eans, nombre: it.tipo + (it.marcas.length ? ` (${it.marcas.map(titulo).join(', ')})` : '') };
+}
+const textoMarcas = it => it.marcas.length ? it.marcas.map(titulo).join(', ') : 'cualquiera, la más barata';
 
 function getFila(store, ean) {
   if (store.dif && Object.prototype.hasOwnProperty.call(store.dif, ean)) return store.dif[ean];
@@ -49,15 +66,20 @@ async function getJSON(url) {
 
 async function cargarBase() {
   const [idx, cat, promos] = await Promise.all([getJSON('data/index.json'), getJSON('data/catalogo.json'), getJSON('promos.json')]);
-  INDEX = idx; CATALOGO = cat; PROMOS = promos;
-  CAT_NORM = cat.map(p => norm(`${p[1]} ${p[2]} ${p[3]}`));
+  INDEX = idx; PROMOS = promos;
+  TIPOS = cat.tipos; TIPO_NORM = TIPOS.map(norm); TIPO_IDX = new Map(TIPOS.map((t, i) => [t, i]));
+  PROD = cat.productos; PROD_NORM = PROD.map(p => norm(`${p[1]} ${p[2]}`));
+  POR_TIPO = TIPOS.map(() => []); PROD.forEach((p, i) => POR_TIPO[p[4]].push(i));
+  POR_EAN = new Map(PROD.map(p => [p[0], p]));
   const f = new Date(idx.fecha + 'T12:00:00');
   const dias = Math.round((Date.now() - f) / 864e5);
   $('#datosInfo').textContent = `Precios del ${DIAS[f.getDay()].toLowerCase()} ${f.getDate()}/${f.getMonth() + 1} · ${idx.sucursales.toLocaleString('es-AR')} sucursales` + (dias > 2 ? ` · ⚠ datos de hace ${dias} días` : '');
   $('#promosInfo').textContent = `Promos bancarias actualizadas al ${promos.actualizado}.`;
-  // refrescar nombres de la lista guardada
-  const porEan = new Map(cat.map(p => [p[0], p]));
-  estado.lista.forEach(it => { const p = porEan.get(it.ean); if (p) { it.nombre = p[1]; it.det = [p[2], p[3]].filter(Boolean).join(' · '); } });
+  // la lista se guarda por nombre de producto genérico (los índices cambian cada día)
+  const antes = estado.lista.length;
+  estado.lista = estado.lista.filter(it => TIPO_IDX.has(it.tipo));
+  estado.lista.forEach(it => it.marcas ||= []);
+  if (estado.lista.length < antes) toast('Algunos productos de tu lista ya no están en el catálogo de hoy.');
 }
 
 async function cargarCeldas() {
@@ -122,23 +144,33 @@ function initControles() {
   $('#formDir').onsubmit = e => { e.preventDefault(); const q = $('#dir').value.trim(); if (q) buscarDireccion(q); };
   if (estado.ubic) $('#ubicInfo').textContent = '📍 ' + estado.ubic.label;
 
-  // buscador de productos
+  // buscador: productos genéricos ("Yerba mate 1 kg") y, si escribís una marca, ese genérico con esa marca
   const b = $('#buscar'), sg = $('#sugg');
   let act = 0, opts = [];
   const pintar = () => {
-    sg.innerHTML = opts.map((p, i) => `<div data-i="${i}" class="${i === act ? 'act' : ''}">${esc(titulo(p[1]))}<br><span class="note">${esc([titulo(p[2]), p[3]].filter(Boolean).join(' · '))}</span></div>`).join('');
+    sg.innerHTML = opts.map((o, i) => `<div data-i="${i}" class="${i === act ? 'act' : ''}">${esc(TIPOS[o.ti])}${o.marca ? ` · <b>${esc(titulo(o.marca))}</b>` : ''}<br><span class="note">${o.marca ? 'solo esta marca' : `cualquier marca, la más barata · ${marcasDe(o.ti).length} marcas`}</span></div>`).join('');
     sg.style.display = opts.length ? 'block' : 'none';
   };
   b.oninput = () => {
     const toks = norm(b.value).split(/\s+/).filter(Boolean);
     opts = [];
-    if (toks.length) for (let i = 0; i < CATALOGO.length && opts.length < 15; i++)
-      if (toks.every(t => CAT_NORM[i].includes(t))) opts.push(CATALOGO[i]);
+    if (toks.length) {
+      for (let t = 0; t < TIPOS.length && opts.length < 8; t++)
+        if (toks.every(k => TIPO_NORM[t].includes(k))) opts.push({ ti: t });
+      const vistos = new Set();
+      for (let i = 0; i < PROD.length && opts.length < 16; i++) {
+        const p = PROD[i], clave = p[4] + '|' + p[2];
+        if (vistos.has(clave) || !toks.every(k => PROD_NORM[i].includes(k) || TIPO_NORM[p[4]].includes(k))) continue;
+        if (!toks.some(k => norm(p[2]).includes(k))) continue;       // solo si escribió (parte de) la marca
+        vistos.add(clave); opts.push({ ti: p[4], marca: p[2] || 'Sin marca' });
+      }
+    }
     act = 0; pintar();
   };
-  const agregar = p => {
-    const ex = estado.lista.find(i => i.ean === p[0]);
-    if (ex) ex.qty++; else estado.lista.push({ ean: p[0], qty: 1, nombre: p[1], det: [p[2], p[3]].filter(Boolean).join(' · ') });
+  const agregar = o => {
+    const tipo = TIPOS[o.ti], marcas = o.marca ? [o.marca] : [];
+    const ex = estado.lista.find(i => i.tipo === tipo && i.marcas.join() === marcas.join());
+    if (ex) ex.qty++; else estado.lista.push({ tipo, marcas, qty: 1 });
     b.value = ''; opts = []; pintar(); render();
   };
   b.onkeydown = e => {
@@ -155,18 +187,39 @@ function renderSide() {
   $('#medios').querySelectorAll('.chip').forEach(c => c.onclick = () => {
     const id = c.dataset.m; estado.medios.has(id) ? estado.medios.delete(id) : estado.medios.add(id); render();
   });
-  $('#lista').innerHTML = estado.lista.length ? estado.lista.map((it, i) => `
-    <div class="item"><span class="n">${esc(titulo(it.nombre || it.ean))}<small>${esc(titulo(it.det || ''))}</small></span>
+  $('#lista').innerHTML = estado.lista.length ? estado.lista.map((it, i) => {
+    const abierta = estado.marcaAbierta === i;
+    const marcas = abierta ? marcasDe(TIPO_IDX.get(it.tipo)) : [];
+    return `<div class="item"><span class="n">${esc(it.tipo)}<button class="marca" data-a="m" data-i="${i}">Marca: ${esc(textoMarcas(it))} ${abierta ? '▴' : '▾'}</button></span>
       <span class="qty"><button data-a="-" data-i="${i}" aria-label="menos">−</button><b style="min-width:20px;text-align:center">${it.qty}</b><button data-a="+" data-i="${i}" aria-label="más">+</button></span>
-      <button class="x" data-a="x" data-i="${i}" aria-label="quitar">×</button></div>`).join('')
-    : '<p class="note">Buscá productos y agregalos a tu lista.</p>';
-  $('#lista').querySelectorAll('button').forEach(btn => btn.onclick = () => {
+      <button class="x" data-a="x" data-i="${i}" aria-label="quitar">×</button></div>
+      ${abierta ? `<div class="marcas"><input type="text" class="filtroMarca" placeholder="Filtrar ${marcas.length} marcas…">
+        <div class="chips"><span class="chip ${it.marcas.length ? '' : 'on'}" data-mc="">Cualquiera (la más barata)</span>
+        ${marcas.map(m => `<span class="chip ${it.marcas.includes(m) ? 'on' : ''}" data-mc="${esc(m)}">${esc(titulo(m))}</span>`).join('')}</div>
+        <p class="note" style="margin:6px 0 0">Podés elegir varias: en cada súper se usa la más barata de las que marques.</p></div>` : ''}`;
+  }).join('') : '<p class="note">Buscá productos y agregalos a tu lista. Después podés elegir marcas o dejar “la más barata”.</p>';
+  $('#lista').querySelectorAll('button[data-a]').forEach(btn => btn.onclick = () => {
     const i = +btn.dataset.i, a = btn.dataset.a;
+    if (a === 'm') { estado.marcaAbierta = estado.marcaAbierta === i ? null : i; renderSide(); return; }
     if (a === '+') estado.lista[i].qty++;
-    if (a === '-' && !--estado.lista[i].qty) estado.lista.splice(i, 1);
-    if (a === 'x') estado.lista.splice(i, 1);
+    if (a === '-' && !--estado.lista[i].qty) { estado.lista.splice(i, 1); estado.marcaAbierta = null; }
+    if (a === 'x') { estado.lista.splice(i, 1); estado.marcaAbierta = null; }
     render();
   });
+  const panel = $('#lista .marcas');
+  if (panel) {
+    const it = estado.lista[estado.marcaAbierta];
+    panel.querySelectorAll('[data-mc]').forEach(ch => ch.onclick = () => {
+      const m = ch.dataset.mc;
+      if (!m) it.marcas = [];
+      else it.marcas = it.marcas.includes(m) ? it.marcas.filter(x => x !== m) : [...it.marcas, m];
+      render();
+    });
+    panel.querySelector('.filtroMarca').oninput = e => {
+      const q = norm(e.target.value);
+      panel.querySelectorAll('[data-mc]').forEach(ch => { if (ch.dataset.mc) ch.hidden = q && !norm(ch.dataset.mc).includes(q); });
+    };
+  }
 }
 
 /* ------------------------------------------------------------ resultados */
@@ -177,7 +230,8 @@ function renderOut() {
   if (!estado.lista.length) { out.innerHTML = `<div class="card empty">Hay ${stores.filter(s => km(estado.ubic, s) <= estado.radio).length} sucursales a menos de ${estado.radio} km.<br>Agregá productos a tu lista para ver dónde conviene comprar.</div>`; return; }
 
   const ctx = { dia: estado.dia, fecha: fechaDelDia(estado.dia), medios: new Set(['efectivo', ...estado.medios]), promos: PROMOS.promos };
-  const res = rankear(stores, estado.ubic, estado.radio, estado.lista, getFila, ctx);
+  const lista = estado.lista.map(paraMotor);
+  const res = rankear(stores, estado.ubic, estado.radio, lista, getFila, ctx);
   if (!res.length) { out.innerHTML = `<div class="card empty">No encontré supermercados con estos productos a menos de ${estado.radio} km. Probá ampliar la distancia.</div>`; return; }
 
   const comp = res.filter(r => !r.faltan.length);
@@ -192,8 +246,15 @@ function renderOut() {
     <div class="big">${fmt(top.total)}</div>
     <div>Comprá en <b>${nom(top.store)}</b> · ${esc(titulo(top.store.dir))} (${top.dist.toFixed(1)} km) pagando con <b>${esc(nombreMedio(top.pago.medio))}</b>. <a href="${mapa(top.store)}" target="_blank" rel="noopener">Cómo llegar →</a></div>
     <div class="note" style="margin-top:4px">Ofertas del súper: −${fmt(top.promoSuper)} · Descuento por medio de pago: −${fmt(top.pago.desc)}${top.pago.nota ? ' (' + esc(top.pago.nota) + ')' : ''}</div>
-    ${top.faltan.length ? `<div class="miss" style="margin-top:6px">Ningún súper cercano tiene toda tu lista. Acá faltan: ${top.faltan.map(f => esc(titulo(f.nombre))).join(', ')}.</div>` : ''}
+    ${top.faltan.length ? `<div class="miss" style="margin-top:6px">Ningún súper cercano tiene toda tu lista. Acá faltan: ${top.faltan.map(f => esc(f.nombre)).join(', ')}.</div>` : ''}
     ${comp.length > 1 ? `<span class="save">Ahorrás ${fmt(prom - top.total)} vs. el promedio · ${fmt(caro - top.total)} vs. el más caro</span>` : ''}</div>`;
+
+  if (comp.length && estado.lista.some(it => it.marcas.length)) {
+    const libre = estado.lista.map(it => paraMotor({ ...it, marcas: [] }));
+    const mejorLibre = rankear(stores, estado.ubic, estado.radio, libre, getFila, ctx).find(r => !r.faltan.length);
+    if (mejorLibre && top.total - mejorLibre.total > 500)
+      h += `<div class="tip">🏷️ <b>Tus marcas te cuestan ${fmt(top.total - mejorLibre.total)} de más.</b> Con la más barata de cada producto pagarías ${fmt(mejorLibre.total)} en ${nom(mejorLibre.store)}. <button class="btn ghost" id="sinMarcas" style="margin-top:6px">Usar la más barata en todo</button></div>`;
+  }
 
   for (const r of comp.slice(0, 3)) {
     const c = r.casi.map(c => { const pot = r.sub + c.falta; return { c, tot: pot - (c.tope == null ? pot * c.pct : Math.min(pot * c.pct, c.tope)) }; })
@@ -201,10 +262,10 @@ function renderOut() {
     if (c) { h += `<div class="tip">💡 En <b>${nom(r.store)}</b> te faltan <b>${fmt(c.c.falta)}</b> para activar “${esc(c.c.nota)}” con ${esc(nombreMedio(c.c.medio))}. Si igual ibas a comprar algo más, ahí te conviene.</div>`; break; }
   }
 
-  const div = mejorDivision(res, estado.lista, getFila, ctx);
+  const div = mejorDivision(res, lista, getFila, ctx);
   if (div) h += `<div class="tip">🛒 <b>¿Te da para ir a dos súper?</b> Si comprás ${div.ra.lineas.length} productos en <b>${nom(div.ra.store)}</b> (${div.da.toFixed(1)} km) y ${div.rb.lineas.length} en <b>${nom(div.rb.store)}</b> (${div.db.toFixed(1)} km) pagás ${fmt(div.tot)}: <b>${fmt(div.ahorro)} menos</b>.</div>`;
 
-  const porDia = porDiaDeLaSemana(stores, estado.ubic, estado.radio, estado.lista, getFila, ctx);
+  const porDia = porDiaDeLaSemana(stores, estado.ubic, estado.radio, lista, getFila, ctx);
   const vals = porDia.filter(Boolean).map(x => x.total);
   if (vals.length) {
     const mx = Math.max(...vals), mn = Math.min(...vals), best = porDia.find(x => x && x.total === mn);
@@ -229,8 +290,8 @@ function renderOut() {
         <div class="tot"><b>${fmt(r.total)}</b><div class="meta">${i && !r.faltan.length && comp.length ? '+' + fmt(r.total - top.total) : '&nbsp;'}</div></div></div>
       <div class="detail"><table><tr><th>Producto</th><th class="r">Cant.</th><th class="r">Unit.</th><th class="r">Total</th></tr>
       ${r.lineas.map(l => l.p === null
-        ? `<tr><td class="miss">${esc(titulo(l.it.nombre))}</td><td class="r">${l.it.qty}</td><td class="r miss" colspan="2">no disponible</td></tr>`
-        : `<tr><td>${esc(titulo(l.it.nombre))}${l.promo ? `<div class="promo">${esc(l.promo)}</div>` : ''}</td><td class="r">${l.it.qty}</td><td class="r">${fmt(l.p)}</td><td class="r">${fmt(l.total)}</td></tr>`).join('')}
+        ? `<tr><td class="miss">${esc(l.it.nombre)}</td><td class="r">${l.it.qty}</td><td class="r miss" colspan="2">${l.it.marcas.length ? 'no tiene esa marca' : 'no disponible'}</td></tr>`
+        : `<tr><td>${esc(l.it.tipo)}<div class="note">${esc(titulo(POR_EAN.get(l.ean)?.[1] || ''))}</div>${l.promo ? `<div class="promo">${esc(l.promo)}</div>` : ''}</td><td class="r">${l.it.qty}</td><td class="r">${fmt(l.p)}</td><td class="r">${fmt(l.total)}</td></tr>`).join('')}
       <tr><td colspan="3">Subtotal con ofertas del súper</td><td class="r">${fmt(r.sub)}</td></tr>
       <tr><td colspan="3">${r.pago.desc ? esc(nombreMedio(r.pago.medio) + ' · ' + r.pago.nota) : 'Sin promo bancaria con tus medios'}</td><td class="r">−${fmt(r.pago.desc)}</td></tr>
       <tr><td colspan="3"><b>Total a pagar</b></td><td class="r"><b>${fmt(r.total)}</b></td></tr></table>
@@ -244,6 +305,7 @@ function renderOut() {
     estado.abiertos.has(id) ? estado.abiertos.delete(id) : estado.abiertos.add(id); el.classList.toggle('open');
   });
   $('#verTodos')?.addEventListener('click', () => { estado.verTodos = true; renderOut(); });
+  $('#sinMarcas')?.addEventListener('click', () => { estado.lista.forEach(it => it.marcas = []); render(); });
 }
 
 function render() { renderSide(); renderOut(); guardar(); }

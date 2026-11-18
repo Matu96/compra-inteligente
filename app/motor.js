@@ -62,18 +62,25 @@ function promoVigente(pr, cad, dia, fecha, medios) {
 
 /**
  * Cotiza una lista en una sucursal.
- * store: {id, cad, ...}; lista: [{ean, qty}]; getFila(store, ean) → fila JSON o null
+ * store: {id, cad, ...}; lista: [{eans:[...], qty}] (o {ean, qty}); getFila(store, ean) → fila JSON o null
  * ctx: {dia, fecha, medios:Set, promos:[...]}
  */
 export function cotizar(store, lista, getFila, ctx) {
   let sub = 0, sinPromo = 0;
   const faltan = [], lineas = [];
   for (const it of lista) {
-    const f = interpretarFila(getFila(store, it.ean));
-    if (!f) { faltan.push(it); lineas.push({ it, p: null }); continue; }
-    const l = lineaConPromo(f.lista, it.qty, f.promo);
-    sub += l.total; sinPromo += f.lista * it.qty;
-    lineas.push({ it, p: f.lista, total: l.total, promo: l.txt });
+    // cada ítem trae las variantes aceptadas (EANs de las marcas elegidas, o de todas si es "cualquier marca"):
+    // se elige la que da el menor total de línea con la oferta del súper aplicada a esa cantidad
+    let mejor = null;
+    for (const ean of it.eans || [it.ean]) {
+      const f = interpretarFila(getFila(store, ean));
+      if (!f) continue;
+      const l = lineaConPromo(f.lista, it.qty, f.promo);
+      if (!mejor || l.total < mejor.total) mejor = { it, ean, p: f.lista, total: l.total, promo: l.txt };
+    }
+    if (!mejor) { faltan.push(it); lineas.push({ it, p: null }); continue; }
+    sub += mejor.total; sinPromo += mejor.p * it.qty;
+    lineas.push(mejor);
   }
   let pago = { medio: 'efectivo', desc: 0, nota: '' };
   const casi = [];

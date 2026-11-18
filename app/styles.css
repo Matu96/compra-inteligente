@@ -76,3 +76,8 @@ th{color:var(--muted);font-weight:600;font-size:12px}
 .empty{color:var(--muted);text-align:center;padding:30px 12px}
 footer{max-width:1100px;margin:auto;padding:0 16px 30px;font-size:12px;color:var(--muted)}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;z-index:20;max-width:90vw}
+.marca{display:block;border:0;background:none;padding:2px 0 0;color:var(--green);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;text-align:left}
+.marcas{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px;margin:2px 0 8px}
+.marcas input{margin-bottom:8px}
+.marcas .chip{font-size:12.5px;padding:5px 9px}
+.chip[hidden]{display:none}
