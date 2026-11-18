@@ -1,0 +1,30 @@
+name: Diagnóstico de precios
+on:
+  workflow_dispatch:
+    inputs:
+      texto: { description: "Producto a buscar (ej: taragui 1)", required: true, default: "taragui 1" }
+      cadena: { description: "Clave de cadena (dia, coto, carrefour…), vacío = todas", required: false, default: "dia" }
+      lat: { description: "Latitud", required: false, default: "-34.6186" }
+      lng: { description: "Longitud", required: false, default: "-58.4410" }
+      radio: { description: "Radio km", required: false, default: "3" }
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Bajar SEPA
+        run: |
+          command -v zstd || (sudo apt-get update -q && sudo apt-get install -y -q zstd)
+          python - <<'PY'
+          import sys; sys.path.insert(0, "pipeline")
+          from datetime import date
+          from sepa_import import obtener_sepa
+          ruta, fecha = obtener_sepa(date.today(), "sepa_cache")
+          open("ruta_sepa.txt", "w").write(ruta); print(ruta, fecha)
+          PY
+      - name: Generar celdas
+        run: python pipeline/build_tiles.py --zip "$(cat ruta_sepa.txt)" --salida data
+      - name: Diagnóstico
+        run: python pipeline/diagnostico.py "${{ inputs.texto }}" --cadena "${{ inputs.cadena }}" --lat ${{ inputs.lat }} --lng ${{ inputs.lng }} --radio ${{ inputs.radio }} --sepa "$(cat ruta_sepa.txt)" --data data
