@@ -1,4 +1,5 @@
 import { aplicarFotos } from './fotos.js';
+import { datosWeb, tiendaDeFoto, TIENDAS_WEB } from './web.js';
 import { DIAS, celdasCercanas, rankear, mejorDivision, porDiaDeLaSemana, fechaDelDia, km, interpretarFila, mejorLinea } from './motor.js';
 
 const $ = s => document.querySelector(s);
@@ -16,6 +17,7 @@ const ICONO = {
   flecha: '<svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>',
   dos: '<svg viewBox="0 0 24 24"><path d="M4 7h11M4 7l3-3M4 7l3 3M20 17H9m11 0-3-3m3 3-3 3"/></svg>',
   marca: '<svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.3"/></svg>',
+  afuera: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>',
   falta: '<svg viewBox="0 0 24 24"><path d="M12 8v5M12 16.5v.5"/><circle cx="12" cy="12" r="9"/></svg>',
   lista: '<svg viewBox="0 0 24 24"><path d="M3 5h2l2.2 10.2a1 1 0 0 0 1 .8H17a1 1 0 0 0 1-.8L19.5 8H6"/><circle cx="9" cy="20" r="1.4"/><circle cx="17" cy="20" r="1.4"/></svg>',
 };
@@ -343,7 +345,7 @@ function abrirFicha(ean) {
   const pi = PROD.indexOf(p);
   const enLista = estado.lista.some(it => it.tipo === TIPOS[ti] && acepta(it.marcas, pi));
   $('#fichaCuerpo').innerHTML = `
-    <div class="ficha-foto">${foto([ean], 'grande', marca, TIPOS[ti])}</div>
+    <a class="ficha-foto" id="fichaFoto" target="_blank" rel="noopener">${foto([ean], 'grande', marca, TIPOS[ti])}</a>
     <h2 id="fichaNombre">${esc(titulo(nombre))}</h2>
     <p class="ficha-meta">${[marca && `<b>${esc(titulo(marca))}</b>`, pres && esc(pres), esc(TIPOS[ti])].filter(Boolean).join('<span aria-hidden="true"> / </span>')}</p>
     <p class="ficha-ean">${interno ? 'Código interno del súper' : `EAN ${esc(ean)}`}</p>
@@ -352,8 +354,10 @@ function abrirFicha(ean) {
         <span><b>${esc(nombreSuc(x.s))}</b><small>${esc(titulo(x.s.dir))}, a ${kmTxt(x.d)}</small></span>
         <span class="r">${x.l.aplica && Math.round(x.l.unit) < Math.round(x.f.lista) ? `<s>${fmt(x.f.lista)}</s>` : ''}<b>${fmt(x.l.total)}</b>${x.l.promo ? `<span class="of">${esc(x.l.promo)}</span>` : ''}</span></li>`).join('')}</ul>`
       : '<p class="ayuda">No lo encontramos en los súper cercanos.</p>'}
+    <div id="fichaWeb"></div>
     <button class="btn grande" type="button" id="fichaAgregar" ${enLista ? 'disabled' : ''}>${enLista ? 'Ya está en tu lista' : 'Agregar a la lista'}</button>`;
   aplicarFotos($('#ficha'));
+  pintarWeb(ean);
   $('#fichaAgregar').onclick = () => {
     const tipo = TIPOS[ti], marcas = [POR_TIPO[ti].some(o => o !== pi && PROD[o][2] === marca) ? '#' + ean : (marca || 'Sin marca')];
     const ex = estado.lista.find(i => i.tipo === tipo && i.marcas.join() === marcas.join());
@@ -363,6 +367,24 @@ function abrirFicha(ean) {
   $('#velo').hidden = false; $('#ficha').hidden = false;
   $('#ficha').scrollTop = 0;
   setTimeout(() => $('#fichaCerrar').focus({ preventScroll: true }), 50);
+}
+/** En la ficha: el producto en las tiendas online (precio de la web, promos y enlace); la foto lleva a la tienda. */
+async function pintarWeb(ean) {
+  const d = await datosWeb(ean);
+  if (!d || $('#ficha').hidden || !$('#fichaWeb')) return;
+  const dueña = tiendaDeFoto(d);
+  if (dueña) {
+    const a = $('#fichaFoto'); a.href = d.t[dueña][0];
+    a.setAttribute('aria-label', `Ver el producto en ${TIENDAS_WEB[dueña]}`); a.classList.add('enlace');
+  }
+  const filas = Object.entries(d.t).sort((a, b) => a[1][1] - b[1][1]);
+  const promoTxt = ps => ps.filter(p => p[0] !== 'bancaria' && !/^\d+% off$/.test(p[1])).slice(0, 2)
+    .map(p => p[1].replace(/\s*\(no acumulable\)/i, '')).join(' · ');
+  $('#fichaWeb').innerHTML = `<section class="ficha-web"><h3>En las tiendas online</h3><ul>${filas.map(([t, [url, final, lista, ps]]) => {
+    const pr = promoTxt(ps);
+    return `<li><a href="${esc(url)}" target="_blank" rel="noopener"><span><b>${esc(TIENDAS_WEB[t] || t)}</b>${pr ? `<small>${esc(pr)}</small>` : ''}</span>
+      <span class="r">${lista > final + 1 ? `<s>${fmt(lista)}</s>` : ''}<b>${fmt(final)}</b></span>${ICONO.afuera}</a></li>`;
+  }).join('')}</ul><p class="ayuda">Precios de la web de cada súper: en el local pueden ser otros. Se abre en su sitio.</p></section>`;
 }
 function cerrarFicha() {
   $('#ficha').hidden = true;

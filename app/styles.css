@@ -297,3 +297,19 @@ h2{font-size:1.125rem;font-weight:700}
 .hoja li.var label{padding-left:22px}
 .hoja li.var label .foto{width:40px;height:40px}
 .hoja li.var label > span:not(.foto){font-size:.9375rem}
+/* ficha: la foto lleva a la tienda online; el producto en cada tienda online */
+.ficha-foto{display:block;position:relative;color:inherit}
+.ficha-foto.enlace::after{content:"Ver en la tienda";position:absolute;right:12px;bottom:10px;font-size:.75rem;font-weight:600;color:var(--suave);
+  background:var(--papel);padding:4px 9px;border-radius:999px;box-shadow:0 0 0 1px var(--linea)}
+.ficha-foto.enlace:focus-visible{outline:3px solid var(--tinta);outline-offset:2px}
+.ficha-web{margin:0 0 16px}
+.ficha-web h3{font-size:1rem;margin:4px 0 6px}
+.ficha-web ul{list-style:none;margin:0;padding:0}
+.ficha-web li a{display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--linea);color:inherit;text-decoration:none}
+.ficha-web li a > span:first-child{flex:1;min-width:0}
+.ficha-web li small{display:block;color:var(--suave);font-size:.8125rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ficha-web .r{text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-variant-numeric:tabular-nums}
+.ficha-web .r b{font:700 1.0625rem var(--f-display)}
+.ficha-web s{color:var(--suave);font-size:.75rem}
+.ficha-web svg{width:18px;height:18px;flex:none;fill:none;stroke:var(--suave);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ficha-web li a:focus-visible{outline:3px solid var(--tinta);outline-offset:2px;border-radius:8px}
