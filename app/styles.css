@@ -73,11 +73,12 @@ h2{font-size:1.125rem;font-weight:700}
 .etiqueta small{display:block;font-size:.6875rem;line-height:1.2;font-weight:600}
 .etiqueta b{display:block;font:800 1.375rem/1.05 var(--f-display)}
 .ticket-lineas{font-family:var(--f-ticket);font-size:.8125rem;margin-top:18px;border-top:1.5px dashed var(--linea);padding-top:10px}
-.tl{display:grid;grid-template-columns:1fr auto;gap:2px 12px;padding:7px 0}
+.tl{display:grid;grid-template-columns:40px 1fr auto;gap:2px 12px;padding:7px 0;align-items:start}
+.tl > .foto{grid-row:1 / span 3;width:40px;height:40px}
 .tl .n{font-weight:600;font-family:var(--f-ui);font-size:.9375rem}
 .tl .v{color:var(--suave);font-size:.75rem}
 .tl .t{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
-.tl .d{grid-column:1 / -1;display:flex;gap:6px;align-items:center;flex-wrap:wrap;color:var(--suave);font-size:.75rem}
+.tl .d{grid-column:2 / -1;display:flex;gap:6px;align-items:center;flex-wrap:wrap;color:var(--suave);font-size:.75rem}
 .tl.falta .n,.tl.falta .t{color:var(--alerta)}
 .of{background:var(--etiqueta);color:var(--etiqueta-tinta);font-weight:600;padding:0 5px;border-radius:3px;font-family:var(--f-ui);font-size:.6875rem}
 .tachado{text-decoration:line-through}
@@ -132,7 +133,8 @@ h2{font-size:1.125rem;font-weight:700}
 .buscador input{flex:1;border:0;background:none;padding:14px 0;outline:none;font-size:1rem;min-width:0}
 .sugg{position:absolute;left:-1.5px;right:-1.5px;top:calc(100% + 6px);background:var(--sup);border:1px solid var(--linea);border-radius:var(--r-m);
   z-index:6;max-height:340px;overflow:auto;display:none;box-shadow:0 14px 32px rgba(21,35,63,.16)}
-.sugg [role=option]{padding:11px 14px;cursor:pointer;border-bottom:1px solid var(--linea)}
+.sugg [role=option]{display:flex;gap:12px;align-items:center;padding:9px 14px;cursor:pointer;border-bottom:1px solid var(--linea)}
+.sugg .foto{width:40px;height:40px}
 .sugg [role=option]:last-child{border-bottom:0}
 .sugg [role=option].act,.sugg [role=option]:hover{background:var(--sel)}
 .sugg small{display:block;color:var(--suave);font-size:.8125rem}
@@ -140,13 +142,14 @@ h2{font-size:1.125rem;font-weight:700}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .chip{border:1px solid var(--linea);background:var(--sup);padding:8px 12px;border-radius:999px;font-size:.875rem;cursor:pointer}
 .items{list-style:none;margin:14px 0 0;padding:0}
-.item{display:grid;grid-template-columns:1fr auto;gap:4px 12px;align-items:center;padding:14px 0;border-bottom:1px solid var(--linea)}
+.item{display:grid;grid-template-columns:auto 1fr auto;gap:4px 12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--linea)}
+.item > .foto{grid-row:1 / span 2;width:52px;height:52px}
 .item .n{font-weight:600}
-.item .marca-btn{grid-column:1;justify-self:start;display:inline-flex;align-items:center;gap:4px;border:0;background:var(--sel);border-radius:999px;
+.item .marca-btn{grid-column:2;justify-self:start;display:inline-flex;align-items:center;gap:4px;border:0;background:var(--sel);border-radius:999px;
   padding:3px 10px;font-size:.8125rem;font-weight:600;cursor:pointer;max-width:100%}
 .item .marca-btn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .item .marca-btn svg{width:14px;height:14px}
-.paso{grid-row:1 / span 2;grid-column:2;display:flex;align-items:center;border:1px solid var(--linea);border-radius:999px;background:var(--sup)}
+.paso{grid-row:1 / span 2;grid-column:3;display:flex;align-items:center;border:1px solid var(--linea);border-radius:999px;background:var(--sup)}
 .paso button{width:38px;height:38px;border:0;background:none;font-size:1.25rem;cursor:pointer;border-radius:999px}
 .paso b{min-width:22px;text-align:center;font-variant-numeric:tabular-nums}
 .barra-total{position:fixed;left:12px;right:12px;bottom:calc(var(--tabs) + 10px + env(safe-area-inset-bottom));z-index:8;max-width:536px;margin:0 auto;
@@ -221,7 +224,7 @@ h2{font-size:1.125rem;font-weight:700}
 .hoja > input{border:1px solid var(--linea);background:var(--papel);border-radius:10px;padding:11px 12px;margin-bottom:6px}
 .hoja ul{list-style:none;margin:0;padding:0;overflow:auto}
 .hoja li label{display:flex;align-items:center;gap:12px;padding:11px 2px;border-bottom:1px solid var(--linea);cursor:pointer}
-.hoja li label > span{flex:1;min-width:0}
+.hoja li label > span:not(.foto){flex:1;min-width:0}
 .hoja li small{display:block;color:var(--suave);font-size:.8125rem}
 .hoja li input{width:20px;height:20px;margin:0;accent-color:var(--tinta)}
 .hoja li.cualquiera label{font-weight:600}
@@ -230,3 +233,11 @@ h2{font-size:1.125rem;font-weight:700}
   padding:11px 16px;border-radius:12px;font-size:.9375rem;z-index:30;max-width:92vw;box-shadow:0 8px 24px rgba(0,0,0,.2)}
 .toast[hidden]{display:none}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+
+/* fotos de producto */
+.foto{position:relative;display:block;flex:none;width:44px;height:44px;border-radius:10px;overflow:hidden;background:var(--sel)
+  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2393A0B8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 7h12l-1 13H7z'/%3E%3Cpath d='M9 7a3 3 0 0 1 6 0'/%3E%3C/svg%3E") center/50% no-repeat}
+.foto img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;padding:3px;opacity:0;transition:opacity .2s}
+.foto.con-foto{background:#fff;box-shadow:inset 0 0 0 1px var(--linea)}
+.foto.con-foto img{opacity:1}
+.hoja li label .foto{width:44px;height:44px}

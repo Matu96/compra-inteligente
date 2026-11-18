@@ -138,6 +138,16 @@ REGLAS_TIPO = [
     (r"\bpan\b.*\b(lactal|de molde|blanco)\b", "Pan lactal"),
     (r"\bgalletitas?\b.*\b(agua|crackers)\b", "Galletitas de agua"),
     (r"\b(tomate|pure de tomate)\b.*\b(triturado|pure|perita|entero)\b", "Tomate {2}"),
+    (r"\bduraznos?\b.*\b(light|diet|sin azucar|s azucar)\b", "Duraznos en almíbar light"),
+    (r"\bduraznos?\b.*\b(mitad|mitades|almibar|lata|trozos|cubos|en cubitos)\b", "Duraznos en almíbar"),
+    (r"\b(anana|pina)\b.*\b(rodajas|almibar|lata|trozos|cubos)\b", "Ananá en almíbar"),
+    (r"\bcoctel de frutas\b|\bensalada de frutas\b.*\b(lata|almibar)\b", "Ensalada de frutas en almíbar"),
+    (r"\barvejas?\b", "Arvejas"),
+    (r"\bchoclo\b.*\b(cremoso|crema)\b", "Choclo cremoso"),
+    (r"\bchoclo\b.*\b(grano|amarillo|entero)\b", "Choclo en grano"),
+    (r"\b(garbanzos?)\b", "Garbanzos"),
+    (r"\b(lentejas?)\b", "Lentejas"),
+    (r"\bporotos?\b.*\b(alubia|blanco)\b", "Porotos alubia"),
     (r"\bhuevos?\b", "Huevos"),
     (r"\bmayonesa\b", "Mayonesa"),
     (r"\batun\b", "Atún"),
@@ -182,8 +192,20 @@ def presentacion_canonica(presentacion):
 
 _TAM_DESC = re.compile(r"(\d+(?:[.,]\d+)?)\s*-?\s*(kg|kgs|kgm|kgr|gr|grs|grm|g|lt|lts|ltr|l|ml|mlt|cc|cm3)(?![a-z])")
 # palabras de envase/código que algunos comercios meten en la descripción y no hacen al producto
-_RUIDO = {"paq", "bsa", "fco", "pot", "lat", "cja", "bot", "bot", "nbe", "mp", "est", "sob", "doy", "pack", "pet", "tbt",
-          "env", "vid", "pvc", "brick", "sachet", "u", "un", "c", "x", "s", "unid", "uni", "saq", "gr", "kg", "lt", "ml"}
+_RUIDO = {"paq", "bsa", "fco", "pot", "lat", "cja", "bot", "nbe", "mp", "est", "sob", "doy", "pack", "pet", "tbt",
+          "env", "vid", "pvc", "brick", "sachet", "u", "un", "c", "x", "s", "unid", "uni", "saq", "gr", "kg", "lt", "ml",
+          "lata", "frasco", "botella", "caja", "bolsa", "pouch", "doypack", "paquete", "sobre", "pote", "tetra", "bandeja",
+          "envase", "vidrio", "plastico", "descartable", "retornable", "botellon"}
+
+def singular(w):
+    """Plural simple del castellano para agrupar ('duraznos'/'durazno', 'mitades'/'mitad')."""
+    if len(w) <= 3 or not w.endswith("s"):
+        return w
+    if w.endswith("ces"):
+        return w[:-3] + "z"
+    if w.endswith("es") and len(w) > 4 and w[-3] not in "aeiou":
+        return w[:-2]
+    return w[:-1]
 
 def presentacion_de(nombre, presentacion):
     """Tamaño del envase. La descripción manda si trae uno (algunos comercios, p. ej. Cencosud, informan la
@@ -222,7 +244,8 @@ def tipo_de(nombre, marca, presentacion):
             d = re.sub(r"\b" + re.escape(w) + r"\b", " ", d)
     d = re.sub(r"\s+", " ", d).strip()
     visible = (d[:1].upper() + d[1:]) if d else nombre.strip()
-    return f"{d}|{clave_pres}", f"{visible} {vis_pres}".strip()
+    clave = " ".join(singular(w) for w in d.split())
+    return f"{clave}|{clave_pres}", f"{visible} {vis_pres}".strip()
 
 
 # ---------------------------------------------------------------- promos del súper

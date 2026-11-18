@@ -1,3 +1,4 @@
+import { aplicarFotos } from './fotos.js';
 import { DIAS, celdasCercanas, rankear, mejorDivision, porDiaDeLaSemana, fechaDelDia, km, interpretarFila, mejorLinea } from './motor.js';
 
 const $ = s => document.querySelector(s);
@@ -58,6 +59,13 @@ function paraMotor(it) {
   const eans = POR_TIPO[ti].filter(pi => !it.marcas.length || it.marcas.includes(PROD[pi][2] || 'Sin marca')).map(pi => PROD[pi][0]);
   return { ...it, eans, nombre: it.tipo + (it.marcas.length ? ` (${it.marcas.map(titulo).join(', ')})` : '') };
 }
+/** EANs representativos para la foto: los de las marcas elegidas o los más vendidos del producto genérico. */
+function eansFoto(ti, marcas = []) {
+  const ps = POR_TIPO[ti] || [];
+  const elegidos = marcas.length ? ps.filter(pi => marcas.includes(PROD[pi][2] || 'Sin marca')) : ps;
+  return elegidos.slice(0, 4).map(pi => PROD[pi][0]);
+}
+const foto = (eans, clase = '') => `<span class="foto ${clase}" data-fotos="${esc(eans.join(','))}" aria-hidden="true"></span>`;
 const textoMarcas = it => !it.marcas.length ? 'Cualquier marca' : it.marcas.length === 1 ? titulo(it.marcas[0]) : `${titulo(it.marcas[0])} y ${it.marcas.length - 1} más`;
 const cercanas = () => estado.ubic ? stores.filter(s => km(estado.ubic, s) <= estado.radio) : [];
 
@@ -165,8 +173,9 @@ function initControles() {
   const b = $('#buscar'), sg = $('#sugg');
   let act = 0, opts = [];
   const pintar = () => {
-    sg.innerHTML = opts.map((o, i) => `<div role="option" data-i="${i}" class="${i === act ? 'act' : ''}" aria-selected="${i === act}">${esc(TIPOS[o.ti])}${o.marca ? `, ${esc(titulo(o.marca))}` : ''}<small>${o.marca ? 'Solo esta marca' : `Cualquier marca, la más barata de ${marcasDe(o.ti).length}`}</small></div>`).join('');
+    sg.innerHTML = opts.map((o, i) => `<div role="option" data-i="${i}" class="${i === act ? 'act' : ''}" aria-selected="${i === act}">${foto(eansFoto(o.ti, o.marca ? [o.marca] : []))}<span>${esc(TIPOS[o.ti])}${o.marca ? `, ${esc(titulo(o.marca))}` : ''}<small>${o.marca ? 'Solo esta marca' : `Cualquier marca, la más barata de ${marcasDe(o.ti).length}`}</small></span></div>`).join('');
     sg.style.display = opts.length ? 'block' : 'none';
+    aplicarFotos(sg);
   };
   b.oninput = () => {
     const toks = norm(b.value).split(/\s+/).filter(Boolean);
@@ -229,9 +238,10 @@ function renderLista() {
   $('#sugerencias').innerHTML = estado.lista.length < 6 && populares.length
     ? `<h2>${estado.lista.length ? 'Sumá algo más' : 'Lo que más se compra'}</h2><div class="chips">${populares.map(t => `<button type="button" class="chip" data-ti="${t}">${esc(TIPOS[t])}</button>`).join('')}</div>` : '';
   $('#lista').innerHTML = estado.lista.map((it, i) => `
-    <li class="item"><span class="n">${esc(it.tipo)}</span>
+    <li class="item">${foto(eansFoto(TIPO_IDX.get(it.tipo), it.marcas), 'f-item')}<span class="n">${esc(it.tipo)}</span>
       <span class="paso"><button type="button" data-a="-" data-i="${i}" aria-label="Uno menos de ${esc(it.tipo)}">−</button><b aria-live="polite">${it.qty}</b><button type="button" data-a="+" data-i="${i}" aria-label="Uno más de ${esc(it.tipo)}">+</button></span>
       <button type="button" class="marca-btn" data-a="m" data-i="${i}" aria-haspopup="dialog"><span>${esc(textoMarcas(it))}</span>${ICONO.flecha}</button></li>`).join('');
+  aplicarFotos($('#lista'));
   $('#lista').querySelectorAll('button[data-a]').forEach(btn => btn.onclick = () => {
     const i = +btn.dataset.i, a = btn.dataset.a;
     if (a === 'm') return abrirHoja(i);
@@ -267,7 +277,8 @@ function pintarHoja() {
   const linea = m => { const x = info.get(m); return x.sucs.size ? `Desde ${fmt(x.min)} en ${x.sucs.size} súper cerca` : 'No está en los súper cercanos'; };
   const filtro = norm($('#hojaFiltro').value);
   $('#hojaMarcas').innerHTML = `<li class="cualquiera"><label><input type="checkbox" data-m="" ${it.marcas.length ? '' : 'checked'}><span>Cualquier marca<small>Se elige la más barata en cada súper</small></span></label></li>` +
-    marcas.map(m => `<li data-m="${esc(m)}" ${filtro && !norm(m).includes(filtro) ? 'hidden' : ''}><label><input type="checkbox" data-m="${esc(m)}" ${it.marcas.includes(m) ? 'checked' : ''}><span>${esc(titulo(m))}<small>${linea(m)}</small></span></label></li>`).join('');
+    marcas.map(m => `<li data-m="${esc(m)}" ${filtro && !norm(m).includes(filtro) ? 'hidden' : ''}><label><input type="checkbox" data-m="${esc(m)}" ${it.marcas.includes(m) ? 'checked' : ''}>${foto(eansFoto(ti, [m]))}<span>${esc(titulo(m))}<small>${linea(m)}</small></span></label></li>`).join('');
+  aplicarFotos($('#hojaMarcas'));
 }
 
 function pintarBarraTotal() {
@@ -285,14 +296,14 @@ const mapa = s => `https://www.google.com/maps/dir/?api=1&destination=${s.lat},$
 const nombreSuc = s => {
   if (!NOMBRES_CAD[s.cad]) return titulo(s.b) || nombreCad(s.cad);
   const f = norm(s.b).match(/\b(market|express|maxi|hiper|mini|super|mayorista|cerca)\b/);
-  return NOMBRES_CAD[s.cad] + (f && !(s.cad === 'chango' && f[1] === 'mas') ? ' ' + titulo(f[1]) : '');
+  return NOMBRES_CAD[s.cad] + (f && !(s.cad === 'chango' && f[1] === 'mas') ? ' ' + f[1][0].toUpperCase() + f[1].slice(1) : '');
 };
 const kmTxt = d => d.toFixed(1).replace('.', ',') + ' km';
 
 function lineasTicket(r) {
   return r.lineas.map(l => l.p === null
-    ? `<div class="tl falta"><span class="n">${esc(l.it.tipo)}</span><span class="t">—</span><span class="d">${l.it.marcas.length ? 'No tiene la marca que elegiste' : 'No lo tiene'}</span></div>`
-    : `<div class="tl"><span class="n">${esc(l.it.tipo)}</span><span class="t">${fmt(l.total)}</span>
+    ? `<div class="tl falta">${foto(eansFoto(TIPO_IDX.get(l.it.tipo), l.it.marcas))}<span class="n">${esc(l.it.tipo)}</span><span class="t">—</span><span class="d">${l.it.marcas.length ? 'No tiene la marca que elegiste' : 'No lo tiene'}</span></div>`
+    : `<div class="tl">${foto([l.ean])}<span class="n">${esc(l.it.tipo)}</span><span class="t">${fmt(l.total)}</span>
         <span class="d">${esc(titulo(POR_EAN.get(l.ean)?.[1] || ''))}</span>
         <span class="d">${l.it.qty} × ${fmt(l.unit)}${l.aplica && Math.round(l.unit) < Math.round(l.p) ? ` <span class="tachado">${fmt(l.p)}</span>` : ''}${l.promo ? ` <span class="of">${esc(l.promo)}</span>` : ''}</span></div>`).join('');
 }
@@ -402,6 +413,7 @@ function renderAhorro() {
     }).join('')}${otras.length > vis.length ? `<button class="btn sec mas" type="button" id="verTodos">Ver las ${otras.length} opciones</button>` : ''}</section>`;
   }
   out.innerHTML = h;
+  aplicarFotos(out);
   out.querySelectorAll('.op-cab').forEach(b => b.onclick = () => { const id = b.dataset.id; estado.abiertos.has(id) ? estado.abiertos.delete(id) : estado.abiertos.add(id); renderAhorro(); });
   out.querySelectorAll('.barra[data-d]').forEach(b => b.onclick = () => { estado.dia = +b.dataset.d; renderAhorro(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
   $('#verTodos')?.addEventListener('click', () => { estado.verTodos = true; renderAhorro(); });
