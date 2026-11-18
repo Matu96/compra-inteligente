@@ -1,4 +1,4 @@
-import { DIAS, celdasCercanas, rankear, mejorDivision, porDiaDeLaSemana, fechaDelDia, km, interpretarFila, lineaConPromo } from './motor.js';
+import { DIAS, celdasCercanas, rankear, mejorDivision, porDiaDeLaSemana, fechaDelDia, km, interpretarFila, mejorLinea } from './motor.js';
 
 const $ = s => document.querySelector(s);
 const fmt = n => '$' + Math.round(n).toLocaleString('es-AR');
@@ -259,7 +259,7 @@ function pintarHoja() {
     const x = info.get(m) || { min: Infinity, sucs: new Set() };
     for (const s of cerca) {
       const f = interpretarFila(getFila(s, ean)); if (!f) continue;
-      x.min = Math.min(x.min, lineaConPromo(f.lista, 1, f.promo).total); x.sucs.add(s.id);
+      x.min = Math.min(x.min, mejorLinea(f, 1).total); x.sucs.add(s.id);
     }
     info.set(m, x);
   }
@@ -336,8 +336,8 @@ function renderAhorro() {
     <div class="ticket-lineas">${lineasTicket(top)}</div>
     <div class="ticket-sum">
       ${top.promoSuper > 0 ? `<div class="ts"><span>Sin ofertas</span><span>${fmt(top.sub + top.promoSuper)}</span></div><div class="ts desc"><span>Ofertas del súper</span><span>−${fmt(top.promoSuper)}</span></div>` : ''}
-      ${top.pago.desc ? `<div class="ts desc"><span>Pagando con ${esc(nombreMedio(top.pago.medio))}<small>${esc(top.pago.nota)}${top.promoSuper > 0 ? '. Se suma a las ofertas' : ''}${top.pago.topeado ? '. Llega al tope' : ''}</small></span><span>−${fmt(top.pago.desc)}</span></div>`
-        : `<div class="ts"><span>Pago<small>Ninguno de tus medios tiene promo acá ${cuando}</small></span><span>$0</span></div>`}
+      ${top.pago.desc ? `<div class="ts desc"><span>Pagando con ${esc(nombreMedio(top.pago.medio))}<small>${esc(top.pago.nota)}${top.promoSuper > 0 ? '. Se suma a las ofertas del súper' : ''}${top.pago.topeado ? '. Llega al tope' : ''}</small></span><span>−${fmt(top.pago.desc)}</span></div>`
+        : `<div class="ts"><span>Pago<small>${top.casi.length ? `${esc(nombreMedio(top.casi[0].medio))} no se aplica: pide una compra mínima de ${fmt(top.casi[0].min)}` : `Ninguno de tus medios tiene promo acá ${cuando}`}</small></span><span>$0</span></div>`}
       <div class="ticket-total"><span>Total ${cuando}</span><b>${fmt(top.total)}</b></div>
       ${top.faltan.length ? `<p class="aviso-faltan">Ningún súper cercano tiene toda la lista. Acá faltan ${top.faltan.length}.</p>` : ''}
     </div></article>`;
@@ -350,10 +350,25 @@ function renderAhorro() {
     if (mejorLibre && top.total - mejorLibre.total > 500)
       ideas.push(`<div class="idea"><span class="ic">${ICONO.marca}</span><div><p>Las marcas que elegiste suman <b>${fmt(top.total - mejorLibre.total)}</b>. Con la más barata de cada producto pagarías ${fmt(mejorLibre.total)} en ${esc(nombreCad(mejorLibre.store.cad))}.</p><button class="btn sec" type="button" id="sinMarcas">Usar la más barata en todo</button></div></div>`);
   }
-  for (const r of comp.slice(0, 3)) {
-    const c = r.casi.map(c => { const pot = r.sub + c.falta; return { c, tot: pot - (c.tope == null ? pot * c.pct : Math.min(pot * c.pct, c.tope)) }; })
-      .find(x => x.tot < top.total + x.c.falta * 0.5);
-    if (c) { ideas.push(`<div class="idea"><span class="ic">${ICONO.falta}</span><p>En ${esc(nombreCad(r.store.cad))} te faltan <b>${fmt(c.c.falta)}</b> para la promo de ${esc(nombreMedio(c.c.medio))} (${esc(c.c.nota.charAt(0).toLowerCase() + c.c.nota.slice(1))}). Si ibas a comprar algo más, sumalo ahí.</p></div>`); break; }
+  // promos de tus medios que no se aplican por el mínimo de compra
+  const conCasi = [top, ...comp.filter(r => r !== top).slice(0, 4)].find(r => r.casi.length);
+  if (conCasi) {
+    const c = conCasi.casi.sort((a, b) => b.desc - a.desc)[0];
+    ideas.push(`<div class="idea"><span class="ic">${ICONO.falta}</span><p>En ${esc(nombreCad(conCasi.store.cad))} la promo de ${esc(nombreMedio(c.medio))} (${Math.round(c.pct * 100)}%${c.tope != null ? `, tope ${fmt(c.tope)}` : ''}) se aplica desde ${fmt(c.min)} y tu compra suma ${fmt(conCasi.sub)}. Te faltan <b>${fmt(c.falta)}</b>; si llegás, te descuentan ${fmt(c.desc)}${conCasi.promoSuper > 0 ? ', además de las ofertas del súper' : ''}.</p></div>`);
+  }
+  // promos de medios que no marcaste
+  const sinMarcar = new Map();
+  for (const r of [top, ...comp.filter(r => r !== top).slice(0, 6)])
+    for (const o of r.otrosMedios) {
+      const ahorro = o.descHoy;
+      const prev = sinMarcar.get(o.medio);
+      if (!prev || ahorro > prev.ahorro) sinMarcar.set(o.medio, { o, r, ahorro, total: r.total - ahorro });
+    }
+  const mejorSin = [...sinMarcar.values()].filter(x => x.ahorro > 0 && x.total < top.total).sort((a, b) => a.total - b.total)[0]
+    || [...sinMarcar.values()].filter(x => x.r === top).sort((a, b) => b.o.pct - a.o.pct)[0];
+  if (mejorSin) {
+    const { o, r } = mejorSin;
+    ideas.push(`<div class="idea"><span class="ic">${ICONO.marca}</span><div><p>${cuando.charAt(0).toUpperCase() + cuando.slice(1)} ${esc(nombreCad(r.store.cad))} tiene ${Math.round(o.pct * 100)}% con ${esc(nombreMedio(o.medio))}${o.min ? ` desde ${fmt(o.min)}` : ''}${r.promoSuper > 0 ? ', y se suma a las ofertas del súper' : ''}. ${mejorSin.ahorro > 0 ? `Con tu lista pagarías <b>${fmt(mejorSin.total)}</b>.` : `Con tu lista te faltan ${fmt(o.falta)} para el mínimo.`}</p><button class="btn sec" type="button" data-activar="${esc(o.medio)}">Tengo ${esc(nombreMedio(o.medio))}</button></div></div>`);
   }
   const div = mejorDivision(res, lista, getFila, ctx);
   if (div) ideas.push(`<div class="idea"><span class="ic">${ICONO.dos}</span><p>Si dividís la compra, ${div.ra.lineas.length} productos en ${esc(nombreCad(div.ra.store.cad))} y ${div.rb.lineas.length} en ${esc(nombreCad(div.rb.store.cad))}, pagás <b>${fmt(div.tot)}</b>: ${fmt(div.ahorro)} menos.</p></div>`);
@@ -381,7 +396,7 @@ function renderAhorro() {
       return `<div class="op"><button type="button" class="op-cab" data-id="${esc(s.id)}" aria-expanded="${open}">
         <span class="op-n">${i + 2}</span>
         <span><span class="nom">${esc(nombreSuc(s))}</span><span class="sub">${esc(titulo(s.dir))}, a ${kmTxt(r.dist)}</span>
-          <span class="pagos">${r.pago.desc ? `<span class="pill">${esc(nombreMedio(r.pago.medio))} −${fmt(r.pago.desc)}</span>` : ''}${r.faltan.length ? `<span class="pill aviso">Faltan ${r.faltan.length}</span>` : ''}</span></span>
+          <span class="pagos">${r.pago.desc ? `<span class="pill">${esc(nombreMedio(r.pago.medio))} −${fmt(r.pago.desc)}</span>` : r.casi.length ? `<span class="pill aviso">${esc(nombreMedio(r.casi[0].medio))} desde ${fmt(r.casi[0].min)}</span>` : ''}${r.faltan.length ? `<span class="pill aviso">Faltan ${r.faltan.length}</span>` : ''}</span></span>
         <span class="tot">${fmt(r.total)}${!r.faltan.length && comp.length && r.total - top.total >= 1 ? `<small>+${fmt(r.total - top.total)}</small>` : ''}</span></button>
         ${open ? `<div class="op-det">${lineasTicket(r)}<p><a class="como-llegar" href="${mapa(s)}" target="_blank" rel="noopener">${ICONO.ruta}Cómo llegar</a></p></div>` : ''}</div>`;
     }).join('')}${otras.length > vis.length ? `<button class="btn sec mas" type="button" id="verTodos">Ver las ${otras.length} opciones</button>` : ''}</section>`;
@@ -390,6 +405,7 @@ function renderAhorro() {
   out.querySelectorAll('.op-cab').forEach(b => b.onclick = () => { const id = b.dataset.id; estado.abiertos.has(id) ? estado.abiertos.delete(id) : estado.abiertos.add(id); renderAhorro(); });
   out.querySelectorAll('.barra[data-d]').forEach(b => b.onclick = () => { estado.dia = +b.dataset.d; renderAhorro(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
   $('#verTodos')?.addEventListener('click', () => { estado.verTodos = true; renderAhorro(); });
+  out.querySelectorAll('[data-activar]').forEach(b => b.onclick = () => { estado.medios.add(b.dataset.activar); guardar(); renderMedios(); renderAhorro(); toast(`Listo, ${nombreMedio(b.dataset.activar)} quedó en tus medios de pago.`); });
   $('#sinMarcas')?.addEventListener('click', () => { estado.lista.forEach(it => it.marcas = []); renderTodo(); toast('Ahora se elige la marca más barata en cada producto.'); });
   pintarBarraTotal();
 }

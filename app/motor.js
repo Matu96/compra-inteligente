@@ -19,12 +19,26 @@ export function celdasCercanas(centro, radioKm, tam = 0.1) {
   return out;
 }
 
-/** Fila de precio del JSON → {lista, promo}. Fila: [lista] o [lista, precioPromo, spec|null, leyenda|null] */
+/** Fila de precio del JSON → {lista, promo, promos}.
+ *  Fila: [lista] · [lista, p1, spec1, ley1] · [lista, p1, spec1, ley1, p2, spec2, ley2] (SEPA informa hasta 2 ofertas) */
 export function interpretarFila(fila) {
   if (!fila) return null;
-  const [lista, pPromo, spec, ley] = fila;
-  if (!pPromo) return { lista, promo: null };
-  return { lista, promo: spec ? { ...spec, precio: pPromo, ley } : { t: 'precio', precio: pPromo, ley } };
+  const lista = fila[0], promos = [];
+  for (let i = 1; i + 2 < fila.length && fila[i]; i += 3) {
+    const [precio, spec, ley] = [fila[i], fila[i + 1], fila[i + 2]];
+    promos.push(spec ? { ...spec, precio, ley } : { t: 'precio', precio, ley });
+  }
+  return { lista, promo: promos[0] || null, promos };
+}
+
+/** La mejor de las ofertas del súper para esa cantidad (o ninguna, si ninguna conviene). */
+export function mejorLinea(f, qty) {
+  let mejor = lineaConPromo(f.lista, qty, null);
+  for (const p of f.promos || (f.promo ? [f.promo] : [])) {
+    const l = lineaConPromo(f.lista, qty, p);
+    if (l.total < mejor.total - 0.01) mejor = l;
+  }
+  return mejor;
 }
 
 /** Total de una línea aplicando la promo del súper según la cantidad. */
@@ -78,7 +92,7 @@ export function cotizar(store, lista, getFila, ctx) {
     for (const ean of it.eans || [it.ean]) {
       const f = interpretarFila(getFila(store, ean));
       if (!f) continue;
-      const l = lineaConPromo(f.lista, it.qty, f.promo);
+      const l = mejorLinea(f, it.qty);
       if (!mejor || l.total < mejor.total) mejor = { it, ean, p: f.lista, total: l.total, promo: l.txt, aplica: l.aplica, unit: l.unit ?? (l.aplica ? l.total / it.qty : f.lista) };
     }
     if (!mejor) { faltan.push(it); lineas.push({ it, p: null }); continue; }
@@ -86,9 +100,13 @@ export function cotizar(store, lista, getFila, ctx) {
     lineas.push(mejor);
   }
   let pago = { medio: 'efectivo', desc: 0, nota: '' };
-  const casi = [];
+  const casi = [], otrosMedios = [];
   for (const pr of ctx.promos) {
-    if (!promoVigente(pr, store.cad, ctx.dia, ctx.fecha, ctx.medios)) continue;
+    if (!promoVigente(pr, store.cad, ctx.dia, ctx.fecha, ctx.medios)) {
+      if (pr.cad === store.cad && pr.dias.includes(ctx.dia) && !ctx.medios.has(pr.medio) &&
+          (!pr.desde || ctx.fecha >= pr.desde) && (!pr.hasta || ctx.fecha <= pr.hasta)) otrosMedios.push(pr);
+      continue;
+    }
     if (sub < (pr.min || 0)) { casi.push({ ...pr, falta: pr.min - sub }); continue; }
     // acumulable (default): el % se aplica sobre el total ya con las ofertas del súper (doble descuento).
     // acumulable: false → solo sobre los productos que no tienen oferta aplicada.
@@ -97,7 +115,11 @@ export function cotizar(store, lista, getFila, ctx) {
     const d = pr.tope == null ? bruto : Math.min(bruto, pr.tope);
     if (d > pago.desc) pago = { medio: pr.medio, desc: d, nota: pr.nota, topeado: pr.tope != null && bruto > pr.tope };
   }
-  return { store, sub, promoSuper: sinPromo - sub, pago, total: sub - pago.desc, faltan, lineas, casi };
+  // cuánto descontaría cada promo que no se aplicó (por mínimo o por medio no marcado), si se cumpliera
+  const potencial = pr => { const base = Math.max(sub, pr.min || 0); const b = base * pr.pct; return pr.tope == null ? b : Math.min(b, pr.tope); };
+  casi.forEach(c => { c.desc = potencial(c); c.totalSiLlega = (sub + c.falta) - c.desc; });
+  otrosMedios.forEach(o => { o.descHoy = sub >= (o.min || 0) ? potencial(o) : 0; o.falta = Math.max(0, (o.min || 0) - sub); });
+  return { store, sub, promoSuper: sinPromo - sub, pago, total: sub - pago.desc, faltan, lineas, casi, otrosMedios };
 }
 
 /** Ranking de sucursales en el radio: primero las que tienen todo, después por total. */

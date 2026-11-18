@@ -89,12 +89,16 @@ def pasada1(path_zip, args, tmp):
                 desc, marca = p.get("productos_descripcion", "").strip(), p.get("productos_marca", "").strip()
                 tipo, tipo_nombre = tipo_de(desc, marca, pres)
                 productos[ean] = [desc, marca, pres, tipo, tipo_nombre]
-            mejor, ley = 0, ""
+            # SEPA trae hasta dos ofertas por producto: se guardan las dos y la app elige según la cantidad
+            ofertas = []
             for i in ("1", "2"):
                 pu = num(p.get(f"productos_precio_unitario_promo{i}"))
-                if pu and pu < lista and (not mejor or pu < mejor):
-                    mejor, ley = pu, p.get(f"productos_leyenda_promo{i}", "").strip().replace("\t", " ")
-            buf[s["celda"]].append(f"{k}\t{ean}\t{lista:g}\t{mejor:g}\t{ley}\n")
+                if pu and pu < lista:
+                    ofertas.append((pu, p.get(f"productos_leyenda_promo{i}", "").strip().replace("\t", " ")))
+            ofertas.sort()
+            o1 = ofertas[0] if ofertas else (0, "")
+            o2 = ofertas[1] if len(ofertas) > 1 and ofertas[1] != ofertas[0] else (0, "")
+            buf[s["celda"]].append(f"{k}\t{ean}\t{lista:g}\t{o1[0]:g}\t{o1[1]}\t{o2[0]:g}\t{o2[1]}\n")
         for c, filas in buf.items():
             with open(os.path.join(tmp, c + ".tsv"), "a", encoding="utf-8") as f:
                 f.writelines(filas)
@@ -106,8 +110,8 @@ def pasada1(path_zip, args, tmp):
 def leer_celda(tmp, c):
     with open(os.path.join(tmp, c + ".tsv"), encoding="utf-8") as f:
         for linea in f:
-            sid, ean, lista, promo, ley = linea.rstrip("\n").split("\t")
-            yield sid, ean, float(lista), float(promo), ley
+            sid, ean, lista, p1, l1, p2, l2 = linea.rstrip("\n").split("\t")
+            yield sid, ean, float(lista), (float(p1), l1, float(p2), l2)
 
 
 def zona_catalogo(c):
@@ -149,19 +153,25 @@ def armar_catalogo(tmp, celdas, productos, sucursales, args):
     return elegidos, pop_ean, pop_tipo
 
 
-def fila_json(lista, promo, ley, cache_spec):
-    if not promo:
+def fila_json(lista, ofertas, cache_spec):
+    """[lista] · [lista, p1, spec1, ley1] · [lista, p1, spec1, ley1, p2, spec2, ley2]"""
+    p1, l1, p2, l2 = ofertas
+    if not p1:
         return [lista]
-    if ley not in cache_spec:
-        cache_spec[ley] = parsear_promo(ley)
-    return [lista, promo, cache_spec[ley], ley or None]
+    for ley in (l1, l2):
+        if ley not in cache_spec:
+            cache_spec[ley] = parsear_promo(ley)
+    fila = [lista, p1, cache_spec[l1], l1 or None]
+    if p2:
+        fila += [p2, cache_spec[l2], l2 or None]
+    return fila
 
 
 def escribir_celda(tmp, c, sucursales, catalogo, args, salida, fecha, cache_spec):
     filas = defaultdict(dict)                       # sid -> ean -> fila
-    for sid, ean, lista, promo, ley in leer_celda(tmp, c):
+    for sid, ean, lista, ofertas in leer_celda(tmp, c):
         if ean in catalogo:
-            filas[sid][ean] = (lista, promo, ley)
+            filas[sid][ean] = (lista, ofertas)
     # descartar locales que no son almacenes/súper (electro, farmacias…): pocos productos del catálogo
     filas = {sid: f for sid, f in filas.items() if len(f) >= args.min_productos}
     if not filas:

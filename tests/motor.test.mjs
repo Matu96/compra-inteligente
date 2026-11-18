@@ -82,3 +82,20 @@ console.log('✔ motor: todas las pruebas pasaron');
   assert.equal(lineaConPromo(f.lista, 2, f.promo).total, 7580);
   console.log('✔ motor: precio en oferta exacto OK');
 }
+
+// dos ofertas del súper sobre el mismo producto: se elige la mejor según la cantidad, y la del banco se suma encima
+{
+  const L = [{ p: [1000, 800, { t: 'pct', v: 0.2 }, '20% off', 650, { t: '2da', v: 0.7 }, 'Llevando 2, 2da al 30%'] }];
+  const S = { id: 'x', cad: 'dia', lat: 0, lng: 0, lp: 0, listas: L, dif: {} };
+  const c0 = { dia: 5, fecha: '2026-11-20', medios: new Set(['modo']), promos: [{ cad: 'dia', medio: 'modo', dias: [5], pct: 0.2, tope: null, min: 1500, nota: 'vie 20%' }] };
+  const r1 = cotizar(S, [{ eans: ['p'], qty: 1 }], getFila, c0);
+  assert.equal(r1.sub, 800);                                  // 1 unidad: gana el 20% off
+  assert.equal(r1.casi.length, 1); assert.equal(r1.casi[0].falta, 700);
+  const r2 = cotizar(S, [{ eans: ['p'], qty: 2 }], getFila, c0);
+  assert.equal(r2.sub, 1300);                                 // 2 unidades: 1000 + 300 (2da al 30%) gana a 1600
+  const r3 = cotizar(S, [{ eans: ['p'], qty: 4 }], getFila, c0);
+  assert.equal(r3.sub, 2600); assert.equal(r3.pago.desc, 520); // y MODO 20% sobre el total ya rebajado
+  const r4 = cotizar(S, [{ eans: ['p'], qty: 4 }], getFila, { ...c0, medios: new Set() });
+  assert.equal(r4.otrosMedios.length, 1); assert.equal(r4.otrosMedios[0].descHoy, 520);
+  console.log('✔ motor: dos ofertas + promo bancaria OK');
+}
