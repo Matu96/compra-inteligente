@@ -1,0 +1,12 @@
+name: Cobertura de fotos
+on: workflow_dispatch
+jobs:
+  ver:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          curl -sSf -o catalogo.json https://matu96.github.io/compra-inteligente/data/catalogo.json
+          gh release download tiendas -p productos.json.gz
+          python pipeline/tiendas/cobertura.py catalogo.json productos.json.gz
