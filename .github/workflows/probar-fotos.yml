@@ -1,0 +1,15 @@
+name: Probar fotos (Open Food Facts)
+on:
+  workflow_dispatch:
+    inputs:
+      eans: { description: "EANs separados por coma", required: true }
+jobs:
+  probar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Consultar
+        run: |
+          curl -sS -A "CompraInteligente/1.0 (github.com/Matu96/compra-inteligente)" "https://world.openfoodfacts.org/api/v2/search?code=${{ inputs.eans }}&fields=code,product_name,brands,image_front_small_url,image_front_thumb_url,image_url&page_size=100" | python3 -c "
+          import json,sys; d=json.load(sys.stdin); print('encontrados:', d.get('count'))
+          for p in d.get('products',[]): print(p.get('code'), '|', p.get('product_name'), '|', p.get('brands'), '|', p.get('image_front_small_url'))"
+          echo; curl -sS -I "https://world.openfoodfacts.org/api/v2/search?code=7790387013610&fields=code" | grep -i "access-control\|HTTP/"
