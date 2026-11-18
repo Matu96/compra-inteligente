@@ -28,8 +28,10 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Probar el motor de cálculo
-        run: node tests/motor.test.mjs
+      - name: Probar el motor de cálculo y la agrupación de productos
+        run: |
+          node tests/motor.test.mjs
+          python tests/tipos_test.py
 
       - name: Bajar SEPA y generar datos por zona
         env:
