@@ -96,7 +96,7 @@ def clave_cadena(bandera):
 
 
 # ---------------------------------------------------------------- producto genérico (para elegir marca)
-_UNIDADES = r"(kg|kgs|g|gr|grs|grm|l|lt|lts|ltr|ml|cc|cm3|un|u|uni|unid|unidades)"
+_UNIDADES = r"(kg|kgs|kgm|kgr|g|gr|grs|grm|l|lt|lts|ltr|ml|mlt|cc|cm3|un|u|uni|unid|unidades)"
 
 # Reglas de producto genérico: la primera que matchea gana. {1}/{2} = grupos capturados.
 # Así "Yerba Mate Canarias Serena 1 Kg" y "Yerba Playadito Suave 1 Kg" caen juntas en "Yerba mate 1 kg".
@@ -154,15 +154,16 @@ def presentacion_canonica(presentacion):
     except ValueError:
         return sin_tildes(presentacion).strip(), presentacion.strip()
     u = m.group(2)
-    if u in ("kg", "kgs", "kilo", "kilos"):
+    # SEPA usa varias formas para la misma unidad: "kgm", "grm", "ltr", "mlt", "uni"…
+    if u in ("kg", "kgs", "kgm", "kgr", "kilo", "kilos", "kilogramo", "kilogramos"):
         v, u = v * 1000, "g"
-    elif u in ("g", "gr", "grs", "grm", "gramos"):
+    elif u in ("g", "gr", "grs", "grm", "grms", "gramo", "gramos"):
         u = "g"
-    elif u in ("l", "lt", "lts", "ltr", "litro", "litros"):
+    elif u in ("l", "lt", "lts", "ltr", "ltrs", "litro", "litros"):
         v, u = v * 1000, "ml"
-    elif u in ("ml", "cc", "cm3"):
+    elif u in ("ml", "mlt", "mls", "cc", "cm3", "cm"):
         u = "ml"
-    elif u in ("un", "u", "uni", "unid", "unidad", "unidades"):
+    elif u in ("un", "u", "uni", "unid", "unidad", "unidades", "und", "uds"):
         u = "u"
     v = round(v)
     if u == "g":

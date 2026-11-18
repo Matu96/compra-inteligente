@@ -1,30 +1,339 @@
 {
   "actualizado": "2026-11-18",
-  "nota": "Promos bancarias y de billeteras por día. Editá este archivo cada mes. dias: 0=domingo … 6=sábado. tope: null = sin tope. cad: clave de cadena (dia, coto, carrefour, chango, jumbo, disco, vea, anonima, coope, josimar, nini, dar…).",
+  "nota": "Promos bancarias y de billeteras por día. Editá este archivo cada mes. dias: 0=domingo … 6=sábado. tope: null = sin tope. cad: clave de cadena (dia, coto, carrefour, chango, jumbo, disco, vea, anonima, coope, josimar, nini, dar…). acumulable: false si el reintegro NO se suma a las ofertas del súper (default true: se aplica sobre el total ya con las ofertas).",
   "medios": [
-    { "id": "cuentadni", "nombre": "Cuenta DNI" },
-    { "id": "cuentadni_nfc", "nombre": "Cuenta DNI + Visa crédito NFC" },
-    { "id": "mp", "nombre": "Mercado Pago" },
-    { "id": "modo", "nombre": "MODO" },
-    { "id": "bna", "nombre": "Banco Nación" },
-    { "id": "galicia", "nombre": "Galicia" },
-    { "id": "santander", "nombre": "Santander" },
-    { "id": "bbva", "nombre": "BBVA" },
-    { "id": "macro", "nombre": "Macro" },
-    { "id": "bancodelsol", "nombre": "Banco del Sol" }
+    {
+      "id": "cuentadni",
+      "nombre": "Cuenta DNI"
+    },
+    {
+      "id": "cuentadni_nfc",
+      "nombre": "Cuenta DNI + Visa crédito NFC"
+    },
+    {
+      "id": "mp",
+      "nombre": "Mercado Pago"
+    },
+    {
+      "id": "modo",
+      "nombre": "MODO"
+    },
+    {
+      "id": "bna",
+      "nombre": "Banco Nación"
+    },
+    {
+      "id": "galicia",
+      "nombre": "Galicia"
+    },
+    {
+      "id": "santander",
+      "nombre": "Santander"
+    },
+    {
+      "id": "bbva",
+      "nombre": "BBVA"
+    },
+    {
+      "id": "macro",
+      "nombre": "Macro"
+    },
+    {
+      "id": "bancodelsol",
+      "nombre": "Banco del Sol"
+    },
+    {
+      "id": "bnamodo",
+      "nombre": "BNA+ MODO"
+    },
+    {
+      "id": "personalpay",
+      "nombre": "Personal Pay"
+    },
+    {
+      "id": "naranjax",
+      "nombre": "Naranja X"
+    },
+    {
+      "id": "columbia",
+      "nombre": "Banco Columbia"
+    },
+    {
+      "id": "ciudadania",
+      "nombre": "Ciudadanía Porteña"
+    }
   ],
   "promos": [
-    { "cad": "dia", "medio": "cuentadni", "dias": [1], "pct": 0.10, "tope": null, "min": 0, "desde": "2026-11-01", "hasta": "2026-11-30", "nota": "Lunes 10% sin tope", "fuente": "https://calcularsueldo.com.ar/?p=16379" },
-    { "cad": "dia", "medio": "cuentadni_nfc", "dias": [1], "pct": 0.20, "tope": null, "min": 0, "desde": "2026-11-01", "hasta": "2026-11-30", "nota": "Lunes 20% sin tope con Visa crédito NFC", "fuente": "https://calcularsueldo.com.ar/?p=16379" },
-    { "cad": "carrefour", "medio": "cuentadni", "dias": [3], "pct": 0.10, "tope": null, "min": 15000, "desde": "2026-11-01", "hasta": "2026-11-30", "nota": "Miércoles 10% sin tope, mín. $15.000", "fuente": "https://calcularsueldo.com.ar/?p=16379" },
-    { "cad": "carrefour", "medio": "cuentadni_nfc", "dias": [3], "pct": 0.10, "tope": null, "min": 15000, "desde": "2026-11-01", "hasta": "2026-11-30", "nota": "Miércoles 10% sin tope, mín. $15.000", "fuente": "https://calcularsueldo.com.ar/?p=16379" },
-    { "cad": "chango", "medio": "cuentadni", "dias": [4], "pct": 0.20, "tope": null, "min": 0, "desde": "2026-11-01", "hasta": "2026-11-30", "nota": "Jueves 20% sin tope", "fuente": "https://calcularsueldo.com.ar/?p=16379" },
-    { "cad": "chango", "medio": "cuentadni_nfc", "dias": [4], "pct": 0.20, "tope": null, "min": 0, "desde": "2026-11-01", "hasta": "2026-11-30", "nota": "Jueves 20% sin tope", "fuente": "https://calcularsueldo.com.ar/?p=16379" },
-    { "cad": "anonima", "medio": "cuentadni", "dias": [3], "pct": 0.10, "tope": 5000, "min": 25000, "desde": "2026-11-01", "hasta": "2026-11-30", "nota": "Miércoles 10%, mín. $25.000, tope $5.000/semana", "fuente": "https://calcularsueldo.com.ar/?p=16379" },
-    { "cad": "josimar", "medio": "cuentadni", "dias": [3], "pct": 0.10, "tope": 6000, "min": 0, "desde": "2026-11-01", "hasta": "2026-11-30", "nota": "Miércoles 10%, tope $6.000/semana", "fuente": "https://calcularsueldo.com.ar/?p=16379" },
-    { "cad": "nini", "medio": "cuentadni", "dias": [2], "pct": 0.15, "tope": 20000, "min": 0, "desde": "2026-11-01", "hasta": "2026-11-30", "nota": "Martes 15%, tope $20.000/semana", "fuente": "https://calcularsueldo.com.ar/?p=16379" },
-    { "cad": "coope", "medio": "cuentadni", "dias": [5, 6], "pct": 0.15, "tope": null, "min": 0, "desde": "2026-11-01", "hasta": "2026-11-30", "nota": "Vie y sáb 15% sin tope (Lobos y La Plata)", "fuente": "https://calcularsueldo.com.ar/?p=16379" },
-    { "cad": "dar", "medio": "bna", "dias": [2], "pct": 0.15, "tope": 5000, "min": 35000, "desde": "2026-11-01", "hasta": "2026-11-30", "nota": "Martes 15% presencial, mín. $35.000, tope $5.000/semana", "fuente": "https://calcularsueldo.com.ar/?p=16394" },
-    { "cad": "dia", "medio": "bancodelsol", "dias": [0, 1, 2, 3, 4, 5, 6], "pct": 0.25, "tope": 10000, "min": 0, "desde": "2026-11-01", "hasta": "2026-11-30", "nota": "25% con débito, tope $10.000/mes", "fuente": "https://calcularsueldo.com.ar/?p=16411" }
+    {
+      "cad": "dia",
+      "medio": "cuentadni",
+      "dias": [
+        1
+      ],
+      "pct": 0.1,
+      "tope": null,
+      "min": 0,
+      "desde": "2026-11-01",
+      "hasta": "2026-11-30",
+      "nota": "Lunes 10% sin tope",
+      "fuente": "https://calcularsueldo.com.ar/?p=16379"
+    },
+    {
+      "cad": "dia",
+      "medio": "cuentadni_nfc",
+      "dias": [
+        1
+      ],
+      "pct": 0.2,
+      "tope": null,
+      "min": 0,
+      "desde": "2026-11-01",
+      "hasta": "2026-12-31",
+      "nota": "Lunes 20% sin tope con Visa crédito NFC",
+      "fuente": "https://calcularsueldo.com.ar/?p=16379"
+    },
+    {
+      "cad": "carrefour",
+      "medio": "cuentadni",
+      "dias": [
+        3
+      ],
+      "pct": 0.1,
+      "tope": null,
+      "min": 15000,
+      "desde": "2026-11-01",
+      "hasta": "2026-11-30",
+      "nota": "Miércoles 10% sin tope, mín. $15.000",
+      "fuente": "https://calcularsueldo.com.ar/?p=16379"
+    },
+    {
+      "cad": "carrefour",
+      "medio": "cuentadni_nfc",
+      "dias": [
+        3
+      ],
+      "pct": 0.1,
+      "tope": null,
+      "min": 15000,
+      "desde": "2026-11-01",
+      "hasta": "2026-11-30",
+      "nota": "Miércoles 10% sin tope, mín. $15.000",
+      "fuente": "https://calcularsueldo.com.ar/?p=16379"
+    },
+    {
+      "cad": "chango",
+      "medio": "cuentadni",
+      "dias": [
+        4
+      ],
+      "pct": 0.2,
+      "tope": null,
+      "min": 0,
+      "desde": "2026-11-01",
+      "hasta": "2026-11-30",
+      "nota": "Jueves 20% sin tope",
+      "fuente": "https://calcularsueldo.com.ar/?p=16379"
+    },
+    {
+      "cad": "chango",
+      "medio": "cuentadni_nfc",
+      "dias": [
+        4
+      ],
+      "pct": 0.2,
+      "tope": null,
+      "min": 0,
+      "desde": "2026-11-01",
+      "hasta": "2026-11-30",
+      "nota": "Jueves 20% sin tope",
+      "fuente": "https://calcularsueldo.com.ar/?p=16379"
+    },
+    {
+      "cad": "anonima",
+      "medio": "cuentadni",
+      "dias": [
+        3
+      ],
+      "pct": 0.1,
+      "tope": 5000,
+      "min": 25000,
+      "desde": "2026-11-01",
+      "hasta": "2026-11-30",
+      "nota": "Miércoles 10%, mín. $25.000, tope $5.000/semana",
+      "fuente": "https://calcularsueldo.com.ar/?p=16379"
+    },
+    {
+      "cad": "josimar",
+      "medio": "cuentadni",
+      "dias": [
+        3
+      ],
+      "pct": 0.1,
+      "tope": 6000,
+      "min": 0,
+      "desde": "2026-11-01",
+      "hasta": "2026-11-30",
+      "nota": "Miércoles 10%, tope $6.000/semana",
+      "fuente": "https://calcularsueldo.com.ar/?p=16379"
+    },
+    {
+      "cad": "nini",
+      "medio": "cuentadni",
+      "dias": [
+        2
+      ],
+      "pct": 0.15,
+      "tope": 20000,
+      "min": 0,
+      "desde": "2026-11-01",
+      "hasta": "2026-11-30",
+      "nota": "Martes 15%, tope $20.000/semana",
+      "fuente": "https://calcularsueldo.com.ar/?p=16379"
+    },
+    {
+      "cad": "coope",
+      "medio": "cuentadni",
+      "dias": [
+        5,
+        6
+      ],
+      "pct": 0.15,
+      "tope": null,
+      "min": 0,
+      "desde": "2026-11-01",
+      "hasta": "2026-11-30",
+      "nota": "Vie y sáb 15% sin tope (Lobos y La Plata)",
+      "fuente": "https://calcularsueldo.com.ar/?p=16379"
+    },
+    {
+      "cad": "dar",
+      "medio": "bna",
+      "dias": [
+        2
+      ],
+      "pct": 0.15,
+      "tope": 5000,
+      "min": 35000,
+      "desde": "2026-11-01",
+      "hasta": "2026-11-30",
+      "nota": "Martes 15% presencial, mín. $35.000, tope $5.000/semana",
+      "fuente": "https://calcularsueldo.com.ar/?p=16394"
+    },
+    {
+      "cad": "dia",
+      "medio": "modo",
+      "dias": [
+        5,
+        6
+      ],
+      "pct": 0.2,
+      "tope": 20000,
+      "min": 35000,
+      "desde": "2026-11-01",
+      "hasta": "2026-11-30",
+      "nota": "Vie y sáb 20% con MODO, mín. $35.000, tope $20.000/mes por banco",
+      "fuente": "https://calcularsueldo.com.ar/?p=16411"
+    },
+    {
+      "cad": "dia",
+      "medio": "bnamodo",
+      "dias": [
+        5,
+        6
+      ],
+      "pct": 0.1,
+      "tope": 7500,
+      "min": 35000,
+      "desde": "2026-11-01",
+      "hasta": "2026-12-31",
+      "nota": "Vie y sáb 10% con BNA+ MODO, mín. $35.000, tope $7.500/mes",
+      "fuente": "https://calcularsueldo.com.ar/?p=16411"
+    },
+    {
+      "cad": "dia",
+      "medio": "mp",
+      "dias": [
+        3
+      ],
+      "pct": 0.1,
+      "tope": null,
+      "min": 0,
+      "desde": "2026-11-01",
+      "hasta": "2026-11-30",
+      "nota": "Miércoles 10% con dinero en cuenta, sin tope",
+      "fuente": "https://calcularsueldo.com.ar/?p=16411"
+    },
+    {
+      "cad": "dia",
+      "medio": "personalpay",
+      "dias": [
+        4
+      ],
+      "pct": 0.15,
+      "tope": null,
+      "min": 0,
+      "desde": "2026-11-01",
+      "hasta": "2026-11-30",
+      "nota": "Jueves 15% con Visa (NFC o QR), sin tope",
+      "fuente": "https://calcularsueldo.com.ar/?p=16411"
+    },
+    {
+      "cad": "dia",
+      "medio": "bancodelsol",
+      "dias": [
+        2
+      ],
+      "pct": 0.25,
+      "tope": 10000,
+      "min": 0,
+      "desde": "2026-11-01",
+      "hasta": "2026-11-30",
+      "nota": "Martes 25% con débito, tope $10.000/mes",
+      "fuente": "https://calcularsueldo.com.ar/?p=16411"
+    },
+    {
+      "cad": "dia",
+      "medio": "naranjax",
+      "dias": [
+        2
+      ],
+      "pct": 0.2,
+      "tope": 3000,
+      "min": 0,
+      "desde": "2026-11-01",
+      "hasta": "2026-12-31",
+      "nota": "Martes 20% (plan Inicial), tope $3.000/semana",
+      "fuente": "https://calcularsueldo.com.ar/?p=16411"
+    },
+    {
+      "cad": "dia",
+      "medio": "columbia",
+      "dias": [
+        1,
+        5
+      ],
+      "pct": 0.2,
+      "tope": 10000,
+      "min": 0,
+      "desde": "2026-10-01",
+      "hasta": "2027-03-31",
+      "nota": "Lun y vie 20% con crédito, tope $10.000 por compra",
+      "fuente": "https://calcularsueldo.com.ar/?p=16411"
+    },
+    {
+      "cad": "dia",
+      "medio": "ciudadania",
+      "dias": [
+        1,
+        4
+      ],
+      "pct": 0.15,
+      "tope": null,
+      "min": 0,
+      "desde": "2026-11-01",
+      "hasta": "2026-11-30",
+      "nota": "Lun y jue 15% (solo CABA), sin tope",
+      "fuente": "https://calcularsueldo.com.ar/?p=16411"
+    }
   ]
 }

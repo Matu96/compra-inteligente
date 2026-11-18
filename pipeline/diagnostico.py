@@ -21,7 +21,7 @@ for nombre, zf in iterar_comercios(a.sepa):
     if a.cadena and not any(clave_cadena(b) == a.cadena for b in band.values()): continue
     sucs = {}
     for s in leer_csv(zf, fs):
-        try: d = km(a.lat, a.lng, float(s["sucursales_latitud"]), float(s["sucursales_longitud"]))
+        try: d = km(a.lat, a.lng, float(s["sucursales_latitud"].replace(",", ".")), float(s["sucursales_longitud"].replace(",", ".")))
         except Exception: continue
         if d <= a.radio:
             sucs[(s["id_comercio"], s["id_bandera"], s["id_sucursal"])] = (d, s.get("sucursales_calle", "") + " " + s.get("sucursales_numero", ""))

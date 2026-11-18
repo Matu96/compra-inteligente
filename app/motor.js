@@ -24,7 +24,7 @@ export function interpretarFila(fila) {
   if (!fila) return null;
   const [lista, pPromo, spec, ley] = fila;
   if (!pPromo) return { lista, promo: null };
-  return { lista, promo: spec ? { ...spec, ley } : { t: 'precio', precio: pPromo, ley } };
+  return { lista, promo: spec ? { ...spec, precio: pPromo, ley } : { t: 'precio', precio: pPromo, ley } };
 }
 
 /** Total de una línea aplicando la promo del súper según la cantidad. */
@@ -40,11 +40,14 @@ export function lineaConPromo(precio, qty, promo) {
       return { total: pares * precio * (2 - promo.v) + (qty % 2) * precio,
         txt: `2da al ${Math.round(100 - promo.v * 100)}%` + (pares ? '' : ' (llevando 2)'), aplica: pares > 0 };
     }
-    case 'pct':
+    case 'pct': {
       if (promo.min && qty < promo.min) return { total: precio * qty, txt: `${Math.round(promo.v * 100)}% llevando ${promo.min}`, aplica: false };
-      return { total: precio * qty * (1 - promo.v), txt: `${Math.round(promo.v * 100)}% off`, aplica: true };
+      // si el súper informa el precio en oferta, ese manda (el % de la leyenda suele estar redondeado)
+      const unit = promo.precio || precio * (1 - promo.v);
+      return { total: unit * qty, txt: `${Math.round(promo.v * 100)}% off`, aplica: true, unit };
+    }
     case 'precio':
-      return { total: promo.precio * qty, txt: (promo.ley || 'Precio promo') + ' · verificá la condición', aplica: true };
+      return { total: promo.precio * qty, txt: (promo.ley || 'Precio promo') + ' · verificá la condición', aplica: true, unit: promo.precio };
   }
   return { total: precio * qty, txt: '', aplica: false };
 }
@@ -76,7 +79,7 @@ export function cotizar(store, lista, getFila, ctx) {
       const f = interpretarFila(getFila(store, ean));
       if (!f) continue;
       const l = lineaConPromo(f.lista, it.qty, f.promo);
-      if (!mejor || l.total < mejor.total) mejor = { it, ean, p: f.lista, total: l.total, promo: l.txt };
+      if (!mejor || l.total < mejor.total) mejor = { it, ean, p: f.lista, total: l.total, promo: l.txt, aplica: l.aplica, unit: l.unit ?? (l.aplica ? l.total / it.qty : f.lista) };
     }
     if (!mejor) { faltan.push(it); lineas.push({ it, p: null }); continue; }
     sub += mejor.total; sinPromo += mejor.p * it.qty;
@@ -87,7 +90,10 @@ export function cotizar(store, lista, getFila, ctx) {
   for (const pr of ctx.promos) {
     if (!promoVigente(pr, store.cad, ctx.dia, ctx.fecha, ctx.medios)) continue;
     if (sub < (pr.min || 0)) { casi.push({ ...pr, falta: pr.min - sub }); continue; }
-    const bruto = sub * pr.pct;
+    // acumulable (default): el % se aplica sobre el total ya con las ofertas del súper (doble descuento).
+    // acumulable: false → solo sobre los productos que no tienen oferta aplicada.
+    const base = pr.acumulable === false ? lineas.reduce((a, l) => a + (l.p !== null && !l.aplica ? l.total : 0), 0) : sub;
+    const bruto = base * pr.pct;
     const d = pr.tope == null ? bruto : Math.min(bruto, pr.tope);
     if (d > pago.desc) pago = { medio: pr.medio, desc: d, nota: pr.nota, topeado: pr.tope != null && bruto > pr.tope };
   }

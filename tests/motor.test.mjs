@@ -1,6 +1,6 @@
 // node tests/motor.test.mjs — pruebas del motor de cálculo (sin dependencias)
 import assert from 'node:assert/strict';
-import { lineaConPromo, cotizar, rankear, celdasCercanas, fechaDelDia, mejorDivision } from '../app/motor.js';
+import { lineaConPromo, cotizar, rankear, celdasCercanas, fechaDelDia, mejorDivision, interpretarFila } from '../app/motor.js';
 
 // promos del súper
 assert.equal(lineaConPromo(1000, 3, { t: 'nxm', n: 3, m: 2 }).total, 2000);
@@ -59,4 +59,26 @@ console.log('✔ motor: todas las pruebas pasaron');
   const c3 = cotizar(S, [{ eans: ['m3'], qty: 1 }], getFila, { ...ctx, promos: [] });
   assert.equal(c3.faltan.length, 1);               // la marca elegida no está en esa sucursal
   console.log('✔ motor: marcas OK');
+}
+
+// doble descuento: promo bancaria sobre el precio ya rebajado por la oferta del súper
+{
+  const L = [{ y: [3790, 2843, { t: 'pct', v: 0.25 }, '25% OFF'], z: [1000] }];
+  const S = { id: 'd', cad: 'dia', lat: 0, lng: 0, lp: 0, listas: L, dif: {} };
+  const pr = { cad: 'dia', medio: 'modo', dias: [5], pct: 0.2, tope: 20000, min: 0, nota: 'vie 20%' };
+  const c = { dia: 5, fecha: '2026-11-20', medios: new Set(['modo']), promos: [pr] };
+  const r = cotizar(S, [{ eans: ['y'], qty: 1 }, { eans: ['z'], qty: 1 }], getFila, c);
+  assert.equal(Math.round(r.sub), 3843);                       // 3790 × 0,75 + 1000
+  assert.equal(Math.round(r.pago.desc), 769);                  // 20% sobre 3842,5
+  const r2 = cotizar(S, [{ eans: ['y'], qty: 1 }, { eans: ['z'], qty: 1 }], getFila, { ...c, promos: [{ ...pr, acumulable: false }] });
+  assert.equal(Math.round(r2.pago.desc), 200);                 // solo sobre lo que no tiene oferta
+  console.log('✔ motor: doble descuento OK');
+}
+
+// el precio en oferta informado por el súper manda sobre el % redondeado de la leyenda (Taragüi 1 kg en Día)
+{
+  const f = interpretarFila([5369, 3790, { t: 'pct', v: 0.29 }, '29% de descuento']);
+  assert.equal(lineaConPromo(f.lista, 1, f.promo).total, 3790);
+  assert.equal(lineaConPromo(f.lista, 2, f.promo).total, 7580);
+  console.log('✔ motor: precio en oferta exacto OK');
 }

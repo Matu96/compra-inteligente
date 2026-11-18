@@ -291,9 +291,9 @@ function renderOut() {
       <div class="detail"><table><tr><th>Producto</th><th class="r">Cant.</th><th class="r">Unit.</th><th class="r">Total</th></tr>
       ${r.lineas.map(l => l.p === null
         ? `<tr><td class="miss">${esc(l.it.nombre)}</td><td class="r">${l.it.qty}</td><td class="r miss" colspan="2">${l.it.marcas.length ? 'no tiene esa marca' : 'no disponible'}</td></tr>`
-        : `<tr><td>${esc(l.it.tipo)}<div class="note">${esc(titulo(POR_EAN.get(l.ean)?.[1] || ''))}</div>${l.promo ? `<div class="promo">${esc(l.promo)}</div>` : ''}</td><td class="r">${l.it.qty}</td><td class="r">${fmt(l.p)}</td><td class="r">${fmt(l.total)}</td></tr>`).join('')}
+        : `<tr><td>${esc(l.it.tipo)}<div class="note">${esc(titulo(POR_EAN.get(l.ean)?.[1] || ''))}</div>${l.promo ? `<div class="promo">${esc(l.promo)}</div>` : ''}</td><td class="r">${l.it.qty}</td><td class="r">${fmt(l.unit)}${l.aplica && Math.round(l.unit) < Math.round(l.p) ? `<div class="tachado">${fmt(l.p)}</div>` : ''}</td><td class="r">${fmt(l.total)}</td></tr>`).join('')}
       <tr><td colspan="3">Subtotal con ofertas del súper</td><td class="r">${fmt(r.sub)}</td></tr>
-      <tr><td colspan="3">${r.pago.desc ? esc(nombreMedio(r.pago.medio) + ' · ' + r.pago.nota) : 'Sin promo bancaria con tus medios'}</td><td class="r">−${fmt(r.pago.desc)}</td></tr>
+      <tr><td colspan="3">${r.pago.desc ? esc(nombreMedio(r.pago.medio) + ' · ' + r.pago.nota) + (r.promoSuper > 0 ? '<div class="promo">se suma a las ofertas del súper</div>' : '') : 'Sin promo bancaria con tus medios'}</td><td class="r">−${fmt(r.pago.desc)}</td></tr>
       <tr><td colspan="3"><b>Total a pagar</b></td><td class="r"><b>${fmt(r.total)}</b></td></tr></table>
       <p style="margin:8px 0 0"><a href="${mapa(s)}" target="_blank" rel="noopener">Cómo llegar →</a></p></div></div>`;
   });
