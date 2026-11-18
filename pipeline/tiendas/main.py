@@ -55,8 +55,9 @@ async def correr(args, almacen):
 
 
 def exportar_app(almacen, carpeta, catalogo=None):
-    """Datos chicos para la app, partidos por los 2 últimos dígitos del EAN (la app baja solo el que necesita):
-    data/web/NN.json = {ean: {"f": [urls de foto], "t": {tienda: [product_url, precio_final, precio_lista, [[tipo, descripcion, precio_unitario], ...]]}}}"""
+    """Datos chicos para la app, partidos por los 3 últimos dígitos del EAN (la app baja solo el que necesita):
+    data/web/NNN.json = {ean: {"f": [urls de foto], "t": {tienda: [product_url, precio_final, precio_lista, [[tipo, descripcion, precio_unitario], ...]]}}}
+    Sin promos bancarias (la app las calcula con promos.json) y como mucho 3 promos por tienda."""
     validos = None
     if catalogo and os.path.exists(catalogo):
         validos = {p[0].lstrip("0") for p in json.load(open(catalogo))["productos"]}
@@ -65,16 +66,16 @@ def exportar_app(almacen, carpeta, catalogo=None):
         ean = (p["ean"] or "").lstrip("0")
         if not ean or (validos is not None and ean not in validos):
             continue
-        e = partes[ean[-2:].zfill(2)].setdefault(ean, {"f": [], "t": {}})
-        e["t"][p["tienda"]] = [p["product_url"], p["precio_final"], p["precio_lista"],
-                               [[x["tipo"], x["descripcion"], x["precio_unitario_promo"]] for x in p["promociones"]]]
+        e = partes[ean[-3:].zfill(3)].setdefault(ean, {"f": [], "t": {}})
+        promos = [[x["tipo"], x["descripcion"][:80], x["precio_unitario_promo"]] for x in p["promociones"] if x["tipo"] != "bancaria"][:3]
+        e["t"][p["tienda"]] = [p["product_url"], p["precio_final"], p["precio_lista"], promos]
         imgs[ean][p["tienda"]] = p["image_url"]
     for parte in partes.values():
         for ean, e in parte.items():
-            e["f"] = [imgs[ean][t] for t in ORDEN_FOTO if t in imgs[ean]]
+            e["f"] = [imgs[ean][t] for t in ORDEN_FOTO if t in imgs[ean]][:2]
     os.makedirs(os.path.join(carpeta, "web"), exist_ok=True)
     total = 0
-    for nn in (f"{i:02d}" for i in range(100)):
+    for nn in (f"{i:03d}" for i in range(1000)):
         parte = partes.get(nn, {})
         json.dump(parte, open(os.path.join(carpeta, "web", f"{nn}.json"), "w"), ensure_ascii=False, separators=(",", ":"))
         total += len(parte)

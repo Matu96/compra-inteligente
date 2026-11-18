@@ -56,6 +56,47 @@ Editá `app/promos.json`. Cada promo:
 
 Al hacer push, la web se vuelve a publicar sola.
 
+## Tiendas online: fotos, enlaces y promos de la web
+
+`pipeline/tiendas/` extrae el catálogo completo de Jumbo, Disco, Vea, Carrefour, Día (VTEX) y Coto Digital (Endeca),
+con marcas comerciales y propias, precio de lista, precio final, descuento y todas las promos de la web
+(volumen, fidelidad, bancarias y directas). **No descarga imágenes**: guarda la URL de la foto en el servidor
+del súper (`image_url`) y la de la ficha (`product_url`).
+
+El workflow **Tiendas online** corre solo todos los días a las 6:17. Publica el resultado en el release
+`tiendas` (`productos.json.gz` con todo, y `tiendas-web.tar.gz` para la app) y dispara la publicación de la app.
+La app usa la foto del súper (que al tocarla en la ficha lleva a su tienda) y muestra en la ficha el precio y las
+promos de cada web. Los precios por sucursal siguen saliendo de SEPA, que es el dato oficial de cada local.
+
+Para correrlo en tu compu:
+
+```bash
+cd pipeline/tiendas
+pip install -r requirements.txt
+python -m playwright install chromium          # solo lo usa Coto para abrir la sesión
+python main.py --tiendas dia,coto --prueba     # prueba corta
+python main.py                                 # todo (sigue donde quedó si se corta; --reiniciar para empezar de cero)
+python revisar.py salida                       # resumen de calidad por tienda
+```
+
+Salida: `salida/tiendas.sqlite` (tabla `productos`, clave `tienda` + `sku_tienda`) y `salida/productos.json`
+con el esquema `tienda, ean, sku_tienda, nombre, marca, precio_lista, precio_final, descuento_porcentaje,
+promociones[{tipo, descripcion, precio_unitario_promo}], image_url, product_url, fecha_extraccion`.
+Opciones: `--rps` (pedidos por segundo por tienda, 4 por defecto), `--rps-coto` (2), `--concurrencia`,
+`--app ../../data --catalogo ../../data/catalogo.json` (arma `data/web/NN.json` para la app).
+
+| Módulo | Qué hace |
+|---|---|
+| `main.py` | CLI, corre las tiendas en paralelo, exporta JSON y los datos de la app |
+| `vtex_scraper.py` | árbol de categorías, búsqueda de a 50, parte por rango de precio si una categoría pasa de 2500; precios de `commertialOffer`, `Teasers`/`PromotionTeasers`, `clusterHighlights`/`productClusters` |
+| `coto_scraper.py` | sesión con Playwright, catálogo Endeca en JSON (`No`/`Nrpp`), `sku.activePrice`, `product.dtoDescuentos` (40%Dto, 2x1, 2da al 70 %, Comunidad) y `dtoDescuentosMediosPago` (cuotas) |
+| `promo_parser.py` | clasifica la promo y calcula el precio unitario real (2x1 → mitad, 2da al 70 % → (1 + 0,3) / 2…); `python promo_parser.py` corre sus pruebas |
+| `storage.py` | SQLite con guardado incremental y reanudación |
+| `red.py` | límite de pedidos por segundo y reintentos con backoff exponencial |
+
+Las tiendas pueden cambiar su web: si una deja de devolver productos, el log del workflow y `revisar.py` lo muestran.
+Las fotos y las marcas son de cada súper y de cada fabricante; la app las muestra enlazadas desde su origen.
+
 ## Probar en tu compu
 
 ```bash

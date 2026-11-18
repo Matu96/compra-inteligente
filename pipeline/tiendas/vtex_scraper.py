@@ -167,24 +167,33 @@ class TiendaVtex:
         return int(m.group(1)) if m else len(datos or [])
 
     async def partes(self, cli, ruta):
-        """Divide la categoría en búsquedas de ≤ 2500 ítems (por rango de precio si hace falta)."""
+        """Divide la categoría en búsquedas de ≤ 2500 ítems. Primero por rango de precio (fq=P:[a TO b]); si la
+        tienda no acepta ese filtro (Cencosud y Carrefour devuelven 400), pide la categoría con varios órdenes
+        distintos (precio ↑↓, nombre ↑↓, más vendidos…): cada orden trae otros 2500 y se deduplica por SKU."""
         base = [("fq", f"C:/{ruta}/")]
         n = await self.total(cli, base)
         if n <= TOPE:
             return [(base, n)] if n else []
-        out, pila = [], [(0, PRECIO_MAX)]
-        while pila:
-            a, b = pila.pop()
-            fq = base + [("fq", f"P:[{a} TO {b}]")]
-            k = await self.total(cli, fq)
-            if not k:
-                continue
-            if k <= TOPE or b - a < 1:
-                out.append((fq, min(k, TOPE)))
-            else:
-                medio = round((a + b) / 2, 2)
-                pila += [(a, medio), (round(medio + 0.01, 2), b)]
-        return out
+        try:
+            out, pila = [], [(0, PRECIO_MAX)]
+            while pila:
+                a, b = pila.pop()
+                fq = base + [("fq", f"P:[{a} TO {b}]")]
+                k = await self.total(cli, fq)
+                if not k:
+                    continue
+                if k <= TOPE or b - a < 1:
+                    out.append((fq, min(k, TOPE)))
+                else:
+                    medio = round((a + b) / 2, 2)
+                    pila += [(a, medio), (round(medio + 0.01, 2), b)]
+            return out
+        except PermissionError:
+            ordenes = ["OrderByPriceASC", "OrderByPriceDESC", "OrderByNameASC", "OrderByNameDESC",
+                       "OrderByTopSaleDESC", "OrderByReleaseDateDESC", "OrderByBestDiscountDESC"]
+            usar = ordenes[: min(len(ordenes), -(-n // TOPE) + 2)]     # algunos de más: los órdenes se pisan
+            self.log(f"  {self.tienda}: categoría {ruta} con {n} productos → {len(usar)} órdenes")
+            return [(base + [("O", o)], TOPE) for o in usar]
 
     async def bajar(self, cli, fq, n, fecha):
         filas = []
