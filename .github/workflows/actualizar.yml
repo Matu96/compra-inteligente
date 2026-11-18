@@ -49,6 +49,15 @@ jobs:
         run: |
           gh release download tiendas -p tiendas-web.tar.gz -D /tmp --clobber && tar -xzf /tmp/tiendas-web.tar.gz -C public/data \
             && du -sh public/data/web || echo "todavía no hay datos de tiendas online"
+          python - <<'EOF' || true
+          import json, os, glob
+          d = "public/data/web"
+          if os.path.isdir(d):
+              fs = glob.glob(d + "/*.json"); n = sum(len(json.load(open(f))) for f in fs)
+              print(f"{len(fs)} partes, {n} productos con datos web")
+              for ean in ("7790387013610", "7790387013498", "7790895000997"):
+                  print(ean, json.dumps(json.load(open(f"{d}/{ean[-3:]}.json")).get(ean), ensure_ascii=False)[:900])
+          EOF
 
       - name: Armar el sitio
         run: |
