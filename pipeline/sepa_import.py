@@ -99,9 +99,14 @@ def clave_cadena(bandera):
 _UNIDADES = r"(kg|kgs|kgm|kgr|g|gr|grs|grm|l|lt|lts|ltr|ml|mlt|cc|cm3|un|u|uni|unid|unidades)"
 
 # Reglas de producto genérico: la primera que matchea gana. {1}/{2} = grupos capturados.
-# Así "Yerba Mate Canarias Serena 1 Kg" y "Yerba Playadito Suave 1 Kg" caen juntas en "Yerba mate 1 kg".
+# Así "Yerba Mate Canarias Serena 1 Kg" y "Yerba Playadito Suave 1 Kg" caen juntas en "Yerba mate suave 1 kg".
+# La yerba se separa por estilo (sin palo, suave, barbacuá, orgánica): quien toma sin palo no la cambia por con palo.
 REGLAS_TIPO = [
     (r"\byerba\b.*\b(compuesta|hierbas|saborizada|sabor|naranja|limon|menta|boldo|cedron|burrito)\b", "Yerba compuesta o saborizada"),
+    (r"\byerba\b.*\b(sin pal\w*|s palo|despalad\w*|pura hoja)\b", "Yerba mate sin palo"),
+    (r"\byerba\b.*\b(suave|serena|liviana)\b", "Yerba mate suave"),
+    (r"\byerba\b.*\bbarbacua\b", "Yerba mate barbacuá"),
+    (r"\byerba\b.*\b(organica|agroecologica)\b", "Yerba mate orgánica"),
     (r"\byerba\b", "Yerba mate"),
     (r"\bdulce de leche\b", "Dulce de leche"),
     (r"\bleche\b.*\ben polvo\b", "Leche en polvo"),

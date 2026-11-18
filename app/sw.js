@@ -1,6 +1,6 @@
 // Service worker: la app abre sin conexión con los últimos precios descargados.
-const VERSION = 'ci-v5';
-const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'motor.js', 'fotos.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'];
+const VERSION = 'ci-v6';
+const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'motor.js', 'fotos.js', 'fotos/lista.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

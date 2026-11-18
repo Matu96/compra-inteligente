@@ -55,15 +55,27 @@ function marcasDe(ti) {
   for (const pi of POR_TIPO[ti]) { const m = PROD[pi][2] || 'Sin marca'; if (!vistas.has(m)) { vistas.add(m); out.push(m); } }
   return out;
 }
+// it.marcas puede tener marcas ('TARAGUI') o productos puntuales ('#7790387013498')
+const acepta = (marcas, pi) => !marcas.length || marcas.includes(PROD[pi][2] || 'Sin marca') || marcas.includes('#' + PROD[pi][0]);
+const marcaSel = m => m?.startsWith('#') ? marcaDe(m.slice(1)) : (m || '');
+// nombre corto de un producto puntual: la marca + lo que lo distingue ("Taragui Sin Palo"), sin el tipo ni la cantidad
+const RELLENO = new Set(['paq', 'paquete', 'x', 'de', 'la', 'el', 'en', 'con', 'bot', 'bsa', 'bolsa', 'lat', 'lata', 'est', 'cja', 'caja', 'pet', 'flex', 'kg', 'kgm', 'gr', 'grm', 'g', 'lt', 'ml', 'un', 'uni']);
+function textoSel(m) {
+  if (!m.startsWith('#')) return titulo(m);
+  const p = POR_EAN.get(m.slice(1)); if (!p) return '';
+  const fuera = new Set([...norm(TIPOS[p[4]]).split(/\W+/), ...norm(p[2] || '').split(/\W+/)]);
+  const resto = norm(p[1]).split(/[^a-z0-9ñ]+/).filter(w => w && !fuera.has(w) && !RELLENO.has(w) && !/\d/.test(w));
+  return `${titulo(p[2] || '')} ${resto.join(' ')}`.trim() || titulo(p[1]);
+}
 function paraMotor(it) {
   const ti = TIPO_IDX.get(it.tipo);
-  const eans = POR_TIPO[ti].filter(pi => !it.marcas.length || it.marcas.includes(PROD[pi][2] || 'Sin marca')).map(pi => PROD[pi][0]);
-  return { ...it, eans, nombre: it.tipo + (it.marcas.length ? ` (${it.marcas.map(titulo).join(', ')})` : '') };
+  const eans = POR_TIPO[ti].filter(pi => acepta(it.marcas, pi)).map(pi => PROD[pi][0]);
+  return { ...it, eans, nombre: it.tipo + (it.marcas.length ? ` (${it.marcas.map(textoSel).join(', ')})` : '') };
 }
 /** EANs representativos para la foto: los de las marcas elegidas o los más vendidos del producto genérico. */
 function eansFoto(ti, marcas = []) {
   const ps = POR_TIPO[ti] || [];
-  const elegidos = marcas.length ? ps.filter(pi => marcas.includes(PROD[pi][2] || 'Sin marca')) : ps;
+  const elegidos = ps.filter(pi => acepta(marcas, pi));
   return elegidos.slice(0, 4).map(pi => PROD[pi][0]);
 }
 /** Tarjeta de producto: la foto de estudio si existe; si no, una etiqueta con la marca en un color propio de la marca. */
@@ -79,7 +91,7 @@ const foto = (eans, clase = '', marca = '', tipo = '') => `<span class="foto ${c
 const marcaDe = ean => POR_EAN.get(ean)?.[2] || '';
 /** Foto que abre la ficha del producto al tocarla. */
 const fotoFicha = (eans, clase = '', marca = '', tipo = '') => `<button type="button" class="foto-btn" data-ficha="${esc(eans[0] || '')}" aria-label="Ver ficha del producto">${foto(eans, clase, marca, tipo)}</button>`;
-const textoMarcas = it => !it.marcas.length ? 'Cualquier marca' : it.marcas.length === 1 ? titulo(it.marcas[0]) : `${titulo(it.marcas[0])} y ${it.marcas.length - 1} más`;
+const textoMarcas = it => !it.marcas.length ? 'Cualquier marca' : it.marcas.length === 1 ? textoSel(it.marcas[0]) : `${textoSel(it.marcas[0])} y ${it.marcas.length - 1} más`;
 const cercanas = () => estado.ubic ? stores.filter(s => km(estado.ubic, s) <= estado.radio) : [];
 
 function toast(msg, ms = 3500) {
@@ -228,13 +240,15 @@ function initControles() {
   document.addEventListener('keydown', e => { if (e.key !== 'Escape') return; if (!$('#ficha').hidden) cerrarFicha(); else if (!$('#hoja').hidden) cerrarHoja(); });
   $('#hojaFiltro').oninput = e => {
     const q = norm(e.target.value);
-    $('#hojaMarcas').querySelectorAll('li[data-m]').forEach(li => li.hidden = !!q && !norm(li.dataset.m).includes(q));
+    $('#hojaMarcas').querySelectorAll('li[data-q]').forEach(li => li.hidden = !!q && !li.dataset.q.includes(q));
   };
   $('#hojaMarcas').onchange = e => {
     const it = estado.lista[estado.hojaItem]; if (!it) return;
     const m = e.target.dataset.m;
     if (m === '') it.marcas = [];
-    else it.marcas = e.target.checked ? [...new Set([...it.marcas, m])] : it.marcas.filter(x => x !== m);
+    else if (!e.target.checked) it.marcas = it.marcas.filter(x => x !== m);
+    else if (m.startsWith('#')) it.marcas = [...new Set([...it.marcas.filter(x => x !== marcaDe(m.slice(1)) && x !== (marcaDe(m.slice(1)) || 'Sin marca')), m])];
+    else it.marcas = [...new Set([...it.marcas.filter(x => !(x.startsWith('#') && (marcaDe(x.slice(1)) || 'Sin marca') === m)), m])];   // la marca entera incluye sus productos
     pintarHoja(); renderTodo(false);
   };
 }
@@ -252,7 +266,7 @@ function renderLista() {
   $('#sugerencias').innerHTML = estado.lista.length < 6 && populares.length
     ? `<h2>${estado.lista.length ? 'Sumá algo más' : 'Lo que más se compra'}</h2><div class="chips">${populares.map(t => `<button type="button" class="chip" data-ti="${t}">${esc(TIPOS[t])}</button>`).join('')}</div>` : '';
   $('#lista').innerHTML = estado.lista.map((it, i) => `
-    <li class="item">${fotoFicha(eansFoto(TIPO_IDX.get(it.tipo), it.marcas), 'f-item', it.marcas.length === 1 ? it.marcas[0] : '', it.tipo)}<span class="n">${esc(it.tipo)}</span>
+    <li class="item">${fotoFicha(eansFoto(TIPO_IDX.get(it.tipo), it.marcas), 'f-item', it.marcas.length === 1 ? marcaSel(it.marcas[0]) : '', it.tipo)}<span class="n">${esc(it.tipo)}</span>
       <span class="paso"><button type="button" data-a="-" data-i="${i}" aria-label="Uno menos de ${esc(it.tipo)}">−</button><b aria-live="polite">${it.qty}</b><button type="button" data-a="+" data-i="${i}" aria-label="Uno más de ${esc(it.tipo)}">+</button></span>
       <button type="button" class="marca-btn" data-a="m" data-i="${i}" aria-haspopup="dialog"><span>${esc(textoMarcas(it))}</span>${ICONO.flecha}</button></li>`).join('');
   aplicarFotos($('#lista'));
@@ -271,27 +285,36 @@ function abrirHoja(i) {
   $('#velo').hidden = false; $('#hoja').hidden = false;
   setTimeout(() => $('#hojaFiltro').focus({ preventScroll: true }), 50);
 }
-function cerrarHoja() { $('#velo').hidden = true; $('#hoja').hidden = true; estado.hojaItem = null; }
+function cerrarHoja() { const habia = estado.hojaItem != null; $('#velo').hidden = true; $('#hoja').hidden = true; estado.hojaItem = null; if (habia) renderLista(); }   // la foto del ítem cambia con la marca elegida
 function pintarHoja() {
   const it = estado.lista[estado.hojaItem]; if (!it) return;
   const ti = TIPO_IDX.get(it.tipo);
   $('#hojaTitulo').textContent = it.tipo;
   // por marca: precio más bajo (con oferta, 1 unidad) y en cuántos súper cercanos está
-  const cerca = cercanas(), info = new Map();
+  const cerca = cercanas(), info = new Map(), porEan = new Map(), prods = new Map();
   for (const pi of POR_TIPO[ti]) {
     const [ean, , marca] = PROD[pi], m = marca || 'Sin marca';
-    const x = info.get(m) || { min: Infinity, sucs: new Set() };
+    const x = info.get(m) || { min: Infinity, sucs: new Set() }, y = { min: Infinity, sucs: new Set() };
     for (const s of cerca) {
       const f = interpretarFila(getFila(s, ean)); if (!f) continue;
-      x.min = Math.min(x.min, mejorLinea(f, 1).total); x.sucs.add(s.id);
+      const t = mejorLinea(f, 1).total;
+      x.min = Math.min(x.min, t); x.sucs.add(s.id); y.min = Math.min(y.min, t); y.sucs.add(s.id);
     }
-    info.set(m, x);
+    info.set(m, x); porEan.set(ean, y);
+    if (!prods.has(m)) prods.set(m, []); prods.get(m).push(pi);
   }
   const marcas = marcasDe(ti).sort((a, b) => (info.get(b).sucs.size > 0) - (info.get(a).sucs.size > 0) || info.get(a).min - info.get(b).min);
-  const linea = m => { const x = info.get(m); return x.sucs.size ? `Desde ${fmt(x.min)} en ${x.sucs.size} súper cerca` : 'No está en los súper cercanos'; };
+  const linea = x => x.sucs.size ? `Desde ${fmt(x.min)} en ${x.sucs.size} súper cerca` : 'No está en los súper cercanos';
   const filtro = norm($('#hojaFiltro').value);
+  const fila = (q, m, foto, nombre, x, clase = '') => `<li data-q="${esc(q)}" class="${clase}" ${filtro && !q.includes(filtro) ? 'hidden' : ''}><label><input type="checkbox" data-m="${esc(m)}" ${it.marcas.includes(m) ? 'checked' : ''}>${foto}<span>${esc(nombre)}<small>${linea(x)}</small></span></label></li>`;
   $('#hojaMarcas').innerHTML = `<li class="cualquiera"><label><input type="checkbox" data-m="" ${it.marcas.length ? '' : 'checked'}><span>Cualquier marca<small>Se elige la más barata en cada súper</small></span></label></li>` +
-    marcas.map(m => `<li data-m="${esc(m)}" ${filtro && !norm(m).includes(filtro) ? 'hidden' : ''}><label><input type="checkbox" data-m="${esc(m)}" ${it.marcas.includes(m) ? 'checked' : ''}>${fotoFicha(eansFoto(ti, [m]), '', m, TIPOS[ti])}<span>${esc(titulo(m))}<small>${linea(m)}</small></span></label></li>`).join('');
+    marcas.map(m => {
+      const ps = prods.get(m);
+      // si la marca tiene más de un producto de este tipo (ej: Taragüi con palo y sin palo), se puede elegir uno puntual
+      const variantes = ps.length < 2 ? '' : ps.slice().sort((a, b) => (porEan.get(PROD[b][0]).sucs.size > 0) - (porEan.get(PROD[a][0]).sucs.size > 0) || porEan.get(PROD[a][0]).min - porEan.get(PROD[b][0]).min)
+        .map(pi => { const [ean, nombre] = PROD[pi]; return fila(norm(`${m} ${nombre}`), '#' + ean, fotoFicha([ean], '', m, TIPOS[ti]), titulo(nombre), porEan.get(ean), 'var'); }).join('');
+      return fila(norm(`${m} ${ps.map(pi => PROD[pi][1]).join(' ')}`), m, fotoFicha(eansFoto(ti, [m]), '', m, TIPOS[ti]), ps.length > 1 ? `${titulo(m)}, cualquiera de sus ${ps.length}` : titulo(m), info.get(m)) + variantes;
+    }).join('');
   aplicarFotos($('#hojaMarcas'));
 }
 
@@ -317,7 +340,8 @@ function abrirFicha(ean) {
   }
   filas.sort((a, b) => a.l.total - b.l.total || a.d - b.d);
   const min = filas[0]?.l.total, max = filas[filas.length - 1]?.l.total;
-  const enLista = estado.lista.some(it => it.tipo === TIPOS[ti] && (!it.marcas.length || it.marcas.includes(marca || 'Sin marca')));
+  const pi = PROD.indexOf(p);
+  const enLista = estado.lista.some(it => it.tipo === TIPOS[ti] && acepta(it.marcas, pi));
   $('#fichaCuerpo').innerHTML = `
     <div class="ficha-foto">${foto([ean], 'grande', marca, TIPOS[ti])}</div>
     <h2 id="fichaNombre">${esc(titulo(nombre))}</h2>
@@ -331,7 +355,7 @@ function abrirFicha(ean) {
     <button class="btn grande" type="button" id="fichaAgregar" ${enLista ? 'disabled' : ''}>${enLista ? 'Ya está en tu lista' : 'Agregar a la lista'}</button>`;
   aplicarFotos($('#ficha'));
   $('#fichaAgregar').onclick = () => {
-    const tipo = TIPOS[ti], marcas = [marca || 'Sin marca'];
+    const tipo = TIPOS[ti], marcas = [POR_TIPO[ti].some(o => o !== pi && PROD[o][2] === marca) ? '#' + ean : (marca || 'Sin marca')];
     const ex = estado.lista.find(i => i.tipo === tipo && i.marcas.join() === marcas.join());
     if (ex) ex.qty++; else estado.lista.push({ tipo, marcas, qty: 1 });
     cerrarFicha(); renderTodo(); toast(`Agregaste ${titulo(nombre)}`, 2000);
@@ -365,7 +389,7 @@ const kmTxt = d => d.toFixed(1).replace('.', ',') + ' km';
 
 function lineasTicket(r) {
   return r.lineas.map(l => l.p === null
-    ? `<div class="tl falta">${foto(eansFoto(TIPO_IDX.get(l.it.tipo), l.it.marcas), '', l.it.marcas[0] || '', l.it.tipo)}<span class="n">${esc(l.it.tipo)}</span><span class="t">—</span><span class="d">${l.it.marcas.length ? 'No tiene la marca que elegiste' : 'No lo tiene'}</span></div>`
+    ? `<div class="tl falta">${foto(eansFoto(TIPO_IDX.get(l.it.tipo), l.it.marcas), '', marcaSel(l.it.marcas[0]), l.it.tipo)}<span class="n">${esc(l.it.tipo)}</span><span class="t">—</span><span class="d">${l.it.marcas.length ? 'No tiene la marca que elegiste' : 'No lo tiene'}</span></div>`
     : `<div class="tl">${fotoFicha([l.ean], '', marcaDe(l.ean), l.it.tipo)}<span class="n">${esc(l.it.tipo)}</span><span class="t">${fmt(l.total)}</span>
         <span class="d">${esc(titulo(POR_EAN.get(l.ean)?.[1] || ''))}</span>
         <span class="d">${l.it.qty} × ${fmt(l.unit)}${l.aplica && Math.round(l.unit) < Math.round(l.p) ? ` <span class="tachado">${fmt(l.p)}</span>` : ''}${l.promo ? ` <span class="of">${esc(l.promo)}</span>` : ''}${l.sinPago ? ` <span class="sinpago">${l.sinPago === 'oferta' ? 'Sin descuento por pago: ya tiene oferta' : 'Excluido de la promo de pago'}</span>` : ''}</span></div>`).join('');

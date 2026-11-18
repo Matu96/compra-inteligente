@@ -3,8 +3,12 @@
 // sacadas por usuarios (probado: 0-2 % de fondo blanco). Para sumar una fuente con licencia (GS1 Argentina, o el
 // permiso de una cadena) basta con agregarla en FUENTES.
 // Sin foto, se muestra una tarjeta con la marca (la arma app.js con data-marca).
+import LOCALES from './fotos/lista.js';
 const USAR_OFF = false;
-const FUENTES = [e => `https://imagenes.preciosclaros.gob.ar/productos/${e.padStart(13, '0')}.jpg`];
+const PROPIAS = new Set(LOCALES);
+// primero las fotos propias de la app (app/fotos), después Precios Claros
+const FUENTES = [e => PROPIAS.has(e) ? `fotos/${e}.jpg` : null,
+  e => `https://imagenes.preciosclaros.gob.ar/productos/${e.padStart(13, '0')}.jpg`];
 // Uso: en el HTML, <span class="foto" data-fotos="ean1,ean2"></span>; después llamar aplicarFotos(raíz).
 // Se muestra la primera foto disponible de la lista de EANs (sirve para "cualquier marca").
 
@@ -64,14 +68,15 @@ function programar() {
 function pintar(raiz) {
   raiz.querySelectorAll('.foto[data-fotos]').forEach(el => {
     if (el.dataset.ok) return;
-    const eans = el.dataset.fotos.split(',').filter(e => /^\d{7,14}$/.test(e));   // los códigos internos no tienen foto pública
+    const eans = el.dataset.fotos.split(',').filter(e => /^\d{7,14}$/.test(e))   // los códigos internos no tienen foto pública
+      .sort((a, b) => PROPIAS.has(b) - PROPIAS.has(a));
     if (USAR_OFF && eans.some(e => !cache.has(e))) {            // Open Food Facts (desactivado)
       eans.forEach(e => { if (!cache.has(e)) pendientes.add(e); });
       return programar();
     }
     // candidatas en orden: fotos de Open Food Facts y, si fallan o no hay, las de Precios Claros
     const grande = el.classList.contains('grande');
-    const urls = [...eans.slice(0, 3).flatMap(e => FUENTES.map(f => f(e))),
+    const urls = [...eans.slice(0, 3).flatMap(e => FUENTES.map(f => f(e)).filter(Boolean)),
       ...(USAR_OFF ? eans.map(e => cache.get(e)).filter(Boolean).map(u => grande ? aGrande(u) : u) : [])];
     el.dataset.ok = '1';
     if (!urls.length) return;
