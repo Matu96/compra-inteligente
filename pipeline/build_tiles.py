@@ -242,6 +242,17 @@ def main():
                    "fuente": "SEPA - Precios Claros (Secretaría de Comercio), CC-BY 4.0",
                    "tam": TAM, "celdas": indice, "cadenas": nombres_cad,
                    "sucursales": total_s, "productos": len(cat), "tipos": len(tipos)}, f, ensure_ascii=False, separators=(",", ":"))
+    import gzip
+    def gz(path):
+        with open(path, "rb") as f:
+            return len(gzip.compress(f.read(), 6))
+    tiles_dir = os.path.join(args.salida, "tiles")
+    grandes = sorted(os.listdir(tiles_dir), key=lambda f: -os.path.getsize(os.path.join(tiles_dir, f)))[:5]
+    cat_path = os.path.join(args.salida, "catalogo.json")
+    log(f"  catálogo: {os.path.getsize(cat_path)/1e6:.1f} MB ({gz(cat_path)/1e6:.1f} MB comprimido)")
+    for f in grandes:
+        fp = os.path.join(tiles_dir, f)
+        log(f"  celda {f}: {indice[f[:-5]]} sucursales · {os.path.getsize(fp)/1e6:.1f} MB ({gz(fp)/1e6:.1f} MB comprimido)")
     peso = sum(os.path.getsize(os.path.join(dp, fn)) for dp, _, fns in os.walk(args.salida) for fn in fns)
     log(f"✔ {len(indice)} celdas · {total_s:,} sucursales · {len(cat):,} productos · {total_p:,} registros · "
         f"{peso/1e6:.0f} MB · {time.time()-t0:.0f}s")
