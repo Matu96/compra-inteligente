@@ -7,6 +7,7 @@ on:
       lat: { description: "Latitud", required: false, default: "-34.6186" }
       lng: { description: "Longitud", required: false, default: "-58.4410" }
       radio: { description: "Radio km", required: false, default: "3" }
+      rapido: { description: "Sin regenerar las zonas (usa la web publicada)", required: false, default: "si" }
 jobs:
   diag:
     runs-on: ubuntu-latest
@@ -24,7 +25,23 @@ jobs:
           ruta, fecha = obtener_sepa(date.today(), "sepa_cache")
           open("ruta_sepa.txt", "w").write(ruta); print(ruta, fecha)
           PY
-      - name: Generar celdas
-        run: python pipeline/build_tiles.py --zip "$(cat ruta_sepa.txt)" --salida data
+      - name: Datos de la app
+        run: |
+          if [ "${{ inputs.rapido }}" = "si" ]; then
+            mkdir -p data/tiles && curl -sSf -o data/index.json https://matu96.github.io/compra-inteligente/data/index.json && curl -sSf -o data/catalogo.json https://matu96.github.io/compra-inteligente/data/catalogo.json
+            python - <<'PY'
+          import json, math, urllib.request
+          lat, lng, r = ${{ inputs.lat }}, ${{ inputs.lng }}, ${{ inputs.radio }}
+          idx = json.load(open("data/index.json")); t = idx["tam"]
+          dl, dg = r / 111, r / (111 * math.cos(math.radians(lat)))
+          for la in range(math.floor((lat - dl) / t), math.floor((lat + dl) / t) + 1):
+              for lo in range(math.floor((lng - dg) / t), math.floor((lng + dg) / t) + 1):
+                  c = f"{la}_{lo}"
+                  if c in idx["celdas"]:
+                      urllib.request.urlretrieve(f"https://matu96.github.io/compra-inteligente/data/tiles/{c}.json", f"data/tiles/{c}.json")
+          PY
+          else
+            python pipeline/build_tiles.py --zip "$(cat ruta_sepa.txt)" --salida data
+          fi
       - name: Diagnóstico
         run: python pipeline/diagnostico.py "${{ inputs.texto }}" --cadena "${{ inputs.cadena }}" --lat ${{ inputs.lat }} --lng ${{ inputs.lng }} --radio ${{ inputs.radio }} --sepa "$(cat ruta_sepa.txt)" --data data

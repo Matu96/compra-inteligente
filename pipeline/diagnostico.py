@@ -52,6 +52,17 @@ for nombre, zf in iterar_comercios(a.sepa):
                   f"promo1={p.get('productos_precio_unitario_promo1')} '{(p.get('productos_leyenda_promo1') or '')[:30]}' | {motivo}")
 print(f"(comercios recorridos: {n_com}, sucursales en radio: {n_suc}, filas que coinciden: {n_fil})")
 
+print("\n== Muestra de lo que se lee por comercio ==")
+for nombre, zf in iterar_comercios(a.sepa):
+    fp = buscar(zf, "productos.csv")
+    if not fp: print("  sin productos.csv:", nombre, zf.namelist()[:5]); continue
+    n, ej, hits = 0, None, 0
+    for p in leer_csv(zf, fp):
+        n += 1
+        if ej is None: ej = p
+        if toks[0] in sin_tildes(p.get("productos_descripcion", "") + " " + p.get("productos_marca", "")): hits += 1
+    print(f"  {nombre[:60]:60} filas={n:9,} con '{toks[0]}'={hits:6} | columnas={list(ej.keys())[:6] if ej else None} | ej={(ej or {}).get('productos_descripcion')}")
+
 print(f"\n== Todo el país: '{a.texto}' (agrupado por producto) ==")
 from collections import Counter
 grupos, ejemplo_claves = Counter(), None
