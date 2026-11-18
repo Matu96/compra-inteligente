@@ -7,23 +7,23 @@ jobs:
   probar:
     runs-on: ubuntu-latest
     steps:
-      - name: Precios Claros
+      - name: Open Food Facts (CORS y tamaños)
         run: |
-          mkdir -p fotos
-          for e in $(echo "${{ inputs.eans }}" | tr ',' ' '); do
-            code=$(curl -sS -A "Mozilla/5.0" -o fotos/$e.jpg -w "%{http_code} %{content_type} %{size_download}" "https://imagenes.preciosclaros.gob.ar/productos/$e.jpg" || echo "fallo")
-            echo "$e -> $code"
-          done
-          python3 -c "
-          import glob
+          pip install pillow -q
+          UA="CompraInteligente/1.0 (github.com/Matu96/compra-inteligente)"
+          curl -sS -A "$UA" "https://world.openfoodfacts.org/api/v2/search?code=${{ inputs.eans }}&fields=code,image_front_url,image_front_small_url&page_size=100" > r.json
+          python3 - <<'PY'
+          import json, urllib.request, io
           from PIL import Image
-          for f in sorted(glob.glob('fotos/*.jpg')):
-              try: im=Image.open(f); print(f, im.size, im.mode)
-              except Exception as e: print(f, 'no es imagen', e)" 2>/dev/null || pip install pillow -q && python3 -c "
-          import glob
-          from PIL import Image
-          for f in sorted(glob.glob('fotos/*.jpg')):
-              try: im=Image.open(f); print(f, im.size, im.mode)
-              except Exception as e: print(f, 'no es imagen', e)"
-      - uses: actions/upload-artifact@v4
-        with: { name: fotos, path: fotos }
+          d = json.load(open("r.json"))
+          for p in d.get("products", []):
+              u = p.get("image_front_url") or ""
+              if not u: continue
+              req = urllib.request.Request(u, headers={"User-Agent": "CompraInteligente/1.0", "Origin": "https://matu96.github.io"})
+              with urllib.request.urlopen(req) as r:
+                  acao = r.headers.get("Access-Control-Allow-Origin"); data = r.read()
+              im = Image.open(io.BytesIO(data)).convert("RGB"); w, h = im.size
+              borde = [im.getpixel((x, y)) for x in range(0, w, max(1, w // 40)) for y in (0, h - 1)] + [im.getpixel((x, y)) for y in range(0, h, max(1, h // 40)) for x in (0, w - 1)]
+              blanco = sum(1 for (r, g, b) in borde if min(r, g, b) > 235) / len(borde)
+              print(p["code"], f"{w}x{h}", f"borde blanco {blanco:.0%}", "CORS:", acao, u[-40:])
+          PY
