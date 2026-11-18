@@ -2,11 +2,12 @@
 // Vienen de pipeline/tiendas (workflow "Tiendas online"), partidos en data/web/NNN.json por los 3 últimos
 // dígitos del EAN: la app baja solo la parte que necesita.
 //   entrada = { f: [url de foto, ...], t: { coto: [product_url, precio_final, precio_lista, [[tipo, texto, precio_unitario], ...]], ... } }
-export const TIENDAS_WEB = { carrefour: 'Carrefour', jumbo: 'Jumbo', disco: 'Disco', vea: 'Vea', dia: 'Día', coto: 'Coto Digital' };
-export const ORDEN_FOTO = ['carrefour', 'jumbo', 'disco', 'vea', 'dia', 'coto'];    // igual que en main.py
+export const TIENDAS_WEB = { carrefour: 'Carrefour', jumbo: 'Jumbo', disco: 'Disco', vea: 'Vea', dia: 'Día', chango: 'Chango Más', coto: 'Coto Digital' };
+export const ORDEN_FOTO = ['carrefour', 'jumbo', 'disco', 'vea', 'dia', 'chango', 'coto'];    // igual que en main.py
 
 const partes = new Map();            // 'NN' -> Promise<objeto>
-const clave = ean => String(ean || '').replace(/^0+/, '');
+// los códigos internos de un súper ("i12-2800002437822", marcas propias) se buscan por su número
+const clave = ean => String(ean || '').replace(/^i\d+-/, '').replace(/^0+/, '');
 const parteDe = e => e.slice(-3).padStart(3, '0');
 
 function cargar(nn) {

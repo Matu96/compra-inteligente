@@ -40,3 +40,24 @@ idx = collections.defaultdict(set)
 for i, p in enumerate(web):
     for w in set(re.findall(r"[a-z0-9]{3,}", (p["nombre"] or "").lower())):
         idx[w].add(i)
+
+# ¿Las fotos cargan desde otra página? (la app las pide sin Referer)
+import random, urllib.request
+from urllib.parse import urlsplit
+random.seed(1)
+print("\nFotos de cada tienda (25 al azar, sin Referer y con Referer de la app):")
+for t in sorted({p["tienda"] for p in web}):
+    urls = random.sample([p["image_url"] for p in web if p["tienda"] == t], 25)
+    for ref in (None, "https://matu96.github.io/"):
+        res = collections.Counter()
+        for u in urls:
+            h = {"User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/131 Mobile Safari/537.36"}
+            if ref:
+                h["Referer"] = ref
+            try:
+                with urllib.request.urlopen(urllib.request.Request(u, headers=h), timeout=20) as r:
+                    tipo = r.headers.get("content-type", "")
+                    res[f"{r.status} {tipo.split(';')[0]} {'chica' if len(r.read()) < 3000 else 'ok'}"] += 1
+            except Exception as e:
+                res[str(getattr(e, "code", type(e).__name__))] += 1
+        print(f"  {t:10} {'con' if ref else 'sin'} Referer: {dict(res)}  ej: {urlsplit(urls[0]).netloc}")

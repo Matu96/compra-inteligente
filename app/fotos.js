@@ -13,8 +13,9 @@ const PROPIAS = new Set(LOCALES);
 const precioClaros = e => `https://imagenes.preciosclaros.gob.ar/productos/${e.padStart(13, '0')}.jpg`;
 const raices = new Set();
 
-async function candidatas(eans) {
-  const web = await Promise.all(eans.map(datosWeb));
+async function candidatas(codigos) {
+  const web = await Promise.all(codigos.map(datosWeb));
+  const eans = codigos.filter(e => /^\d{7,14}$/.test(e));          // los códigos internos no están en Precios Claros
   return [
     ...eans.filter(e => PROPIAS.has(e)).map(e => `fotos/${e}.jpg`),
     ...web.flatMap(d => (d?.f || []).slice(0, 2)),
@@ -26,10 +27,11 @@ function pintar(raiz) {
   raiz.querySelectorAll('.foto[data-fotos]').forEach(async el => {
     if (el.dataset.ok) return;
     el.dataset.ok = '1';
-    const eans = el.dataset.fotos.split(',').filter(e => /^\d{7,14}$/.test(e)).slice(0, 3);   // los códigos internos no tienen foto
-    if (!eans.length) return;
+    const codigos = el.dataset.fotos.split(',').filter(e => /^(i\d+-)?\d{6,14}$/.test(e)).slice(0, 3);
+    if (!codigos.length) return;
     el.classList.add('cargando');
-    const urls = await candidatas(eans);
+    const urls = await candidatas(codigos);
+    if (!urls.length) { el.classList.remove('cargando'); return; }
     const img = new Image();
     img.alt = ''; img.decoding = 'async'; img.referrerPolicy = 'no-referrer';
     let i = 0;

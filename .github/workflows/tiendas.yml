@@ -5,7 +5,7 @@ on:
     - cron: "17 9 * * *"          # todos los días 6:17 hora de Argentina
   workflow_dispatch:
     inputs:
-      tiendas: { description: "Tiendas (coma): jumbo,disco,vea,carrefour,dia,coto", required: false, default: "jumbo,disco,vea,carrefour,dia,coto" }
+      tiendas: { description: "Tiendas (coma): jumbo,disco,vea,carrefour,dia,chango,coto", required: false, default: "jumbo,disco,vea,carrefour,dia,chango,coto" }
       prueba: { description: "Prueba corta (pocas categorías, no publica)", required: false, default: "no" }
 
 permissions:
@@ -33,7 +33,7 @@ jobs:
         run: |
           curl -sSf -o catalogo.json https://matu96.github.io/compra-inteligente/data/catalogo.json || echo "sin catálogo de la app"
           PRUEBA=""; [ "${{ inputs.prueba }}" = "si" ] && PRUEBA="--prueba"
-          python pipeline/tiendas/main.py --tiendas "${{ inputs.tiendas || 'jumbo,disco,vea,carrefour,dia,coto' }}" $PRUEBA \
+          python pipeline/tiendas/main.py --tiendas "${{ inputs.tiendas || 'jumbo,disco,vea,carrefour,dia,chango,coto' }}" $PRUEBA \
             --salida salida --app salida/app --catalogo catalogo.json
           ls -la salida salida/app/web | head -20
           du -sh salida/app/web

@@ -14,7 +14,9 @@ import argparse
 import asyncio
 import json
 import os
+import re
 import sys
+import unicodedata
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -24,7 +26,7 @@ from storage import Almacen  # noqa: E402
 from vtex_scraper import TIENDAS, TiendaVtex  # noqa: E402
 
 TODAS = [*TIENDAS, "coto"]
-ORDEN_FOTO = ["carrefour", "jumbo", "disco", "vea", "dia", "coto"]   # de qué tienda tomar la foto primero
+ORDEN_FOTO = ["carrefour", "jumbo", "disco", "vea", "dia", "chango", "coto"]   # de qué tienda tomar la foto primero
 
 
 def log(*a):
@@ -54,18 +56,36 @@ async def correr(args, almacen):
     return res
 
 
+def _palabras(t):
+    t = unicodedata.normalize("NFD", (t or "").lower())
+    t = "".join(c for c in t if unicodedata.category(c) != "Mn")
+    return {w for w in re.findall(r"[a-z]{3,}", t) if w not in {"con", "sin", "paq", "bot", "x", "por", "de", "la", "los"}}
+
+
 def exportar_app(almacen, carpeta, catalogo=None):
     """Datos chicos para la app, partidos por los 3 últimos dígitos del EAN (la app baja solo el que necesita):
     data/web/NNN.json = {ean: {"f": [urls de foto], "t": {tienda: [product_url, precio_final, precio_lista, [[tipo, descripcion, precio_unitario], ...]]}}}
     Sin promos bancarias (la app las calcula con promos.json) y como mucho 3 promos por tienda."""
-    validos = None
+    # catálogo de la app: EAN común, o código interno de un súper ("i12-2800002437822", marcas propias): para
+    # esos se busca el mismo número en la web, pero solo si el nombre coincide (los códigos internos se repiten
+    # entre cadenas)
+    validos, internos = None, {}
     if catalogo and os.path.exists(catalogo):
-        validos = {p[0].lstrip("0") for p in json.load(open(catalogo))["productos"]}
+        validos = set()
+        for cod, nombre, *_ in json.load(open(catalogo))["productos"]:
+            m = re.fullmatch(r"i\d+-(\d{6,14})", cod)
+            if m:
+                internos[m.group(1).lstrip("0")] = _palabras(nombre)
+            else:
+                validos.add(cod.lstrip("0"))
     partes, imgs = defaultdict(dict), defaultdict(dict)
     for p in almacen.productos():
         ean = (p["ean"] or "").lstrip("0")
-        if not ean or (validos is not None and ean not in validos):
+        if not ean:
             continue
+        if validos is not None and ean not in validos:
+            if ean not in internos or len(internos[ean] & _palabras(p["nombre"])) < 2:
+                continue
         e = partes[ean[-3:].zfill(3)].setdefault(ean, {"f": [], "t": {}})
         promos = [[x["tipo"], x["descripcion"][:80], x["precio_unitario_promo"]] for x in p["promociones"] if x["tipo"] != "bancaria"][:3]
         e["t"][p["tienda"]] = [p["product_url"], p["precio_final"], p["precio_lista"], promos]

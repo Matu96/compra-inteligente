@@ -19,6 +19,7 @@ TIENDAS = {
     "vea": "https://www.vea.com.ar",
     "carrefour": "https://www.carrefour.com.ar",
     "dia": "https://diaonline.supermercadosdia.com.ar",
+    "chango": "https://www.masonline.com.ar",          # Chango Más / Más Online (ex Walmart)
 }
 PAGINA = 50
 TOPE = 2500            # VTEX corta en _from + 50 <= 2500
