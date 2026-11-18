@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f8a4c">
+<meta name="description" content="Encontrá dónde y con qué medio de pago te sale más barata la compra del súper cerca tuyo.">
+<title>Compra Inteligente</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+  <div class="brand">
+    <img src="icons/icon.svg" alt="" width="34" height="34">
+    <div><h1>Compra <span>Inteligente</span></h1>
+    <p id="datosInfo">Cargando precios…</p></div>
+  </div>
+  <button id="btnInstalar" class="btn ghost" hidden>Instalar app</button>
+</header>
+
+<div class="wrap">
+  <aside>
+    <section class="card">
+      <h2>📍 Dónde estás</h2>
+      <p id="ubicInfo" class="note">Todavía no sé tu ubicación.</p>
+      <div class="row">
+        <button id="btnGPS" class="btn">Usar mi ubicación</button>
+      </div>
+      <form id="formDir" class="row" style="margin-top:8px">
+        <input type="text" id="dir" placeholder="…o escribí una dirección (ej: Av. Rivadavia 5000, CABA)">
+        <button class="btn ghost" type="submit">Buscar</button>
+      </form>
+      <label class="small">Distancia máxima: <b id="radioLbl"></b></label>
+      <input type="range" id="radio" min="0.5" max="10" step="0.5" value="3">
+    </section>
+
+    <section class="card">
+      <h2>📅 Cuándo y cómo pagás</h2>
+      <select id="dia"></select>
+      <label class="small">Medios de pago que tenés</label>
+      <div class="chips" id="medios"></div>
+    </section>
+
+    <section class="card">
+      <h2>🛒 Tu lista</h2>
+      <div class="search">
+        <input type="text" id="buscar" placeholder="Buscar producto (ej: yerba, leche entera)…" autocomplete="off">
+        <div class="sugg" id="sugg"></div>
+      </div>
+      <div id="lista"></div>
+    </section>
+  </aside>
+
+  <main id="out"><div class="card empty">Cargando…</div></main>
+</div>
+
+<footer>
+  Precios: base oficial SEPA / Precios Claros (Secretaría de Comercio, CC-BY 4.0), actualizada todos los días.
+  Las promos bancarias se cargan a mano y pueden cambiar: verificá en caja. Los topes de reintegro se asumen sin usar.
+  <span id="promosInfo"></span>
+</footer>
+
+<div id="toast" class="toast" hidden></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

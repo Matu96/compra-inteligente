@@ -1,0 +1,352 @@
+#!/usr/bin/env python3
+"""
+sepa_import.py — Baja la base SEPA (Precios Claros) del día y arma el archivo de datos
+para la app Compra Inteligente, filtrado por ubicación.
+
+Solo usa la biblioteca estándar de Python 3.9+.
+
+Ejemplos:
+  # Caballito, 5 km a la redonda, datos del día de hoy
+  python3 sepa_import.py --lat -34.6186 --lng -58.4410 --radio 5 --nombre "Caballito"
+
+  # Toda una provincia (sin filtro por distancia)
+  python3 sepa_import.py --provincia AR-B --nombre "Provincia de Buenos Aires"
+
+  # Usar un ZIP ya descargado y guardar también en SQLite
+  python3 sepa_import.py --zip sepa_lunes.zip --lat -34.64 --lng -58.56 --radio 4 --sqlite sepa.db
+
+Salida: compra_inteligente_<fecha>.json  → se carga en el prototipo con "Cargar datos reales".
+"""
+import argparse, csv, io, json, math, os, re, sqlite3, sys, time, unicodedata, urllib.request, zipfile
+from collections import Counter, defaultdict
+from datetime import date, datetime
+
+CKAN_URL = "https://datos.produccion.gob.ar/api/3/action/package_show?id=sepa-precios"
+DIAS = ["lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo"]  # date.weekday()
+
+csv.field_size_limit(10_000_000)
+
+
+# ---------------------------------------------------------------- utilidades
+def sin_tildes(s):
+    return "".join(c for c in unicodedata.normalize("NFD", s or "") if unicodedata.category(c) != "Mn").lower()
+
+def km(lat1, lng1, lat2, lng2):
+    r = math.radians
+    a = math.sin(r(lat2 - lat1) / 2) ** 2 + math.cos(r(lat1)) * math.cos(r(lat2)) * math.sin(r(lng2 - lng1) / 2) ** 2
+    return 2 * 6371 * math.asin(math.sqrt(a))
+
+def num(x):
+    if x is None:
+        return None
+    x = x.strip().replace("$", "")
+    if not x:
+        return None
+    if "," in x and "." in x:          # 1.234,56
+        x = x.replace(".", "").replace(",", ".")
+    elif "," in x:
+        x = x.replace(",", ".")
+    try:
+        v = float(x)
+        return v if v > 0 else None
+    except ValueError:
+        return None
+
+def log(*a):
+    print(*a, file=sys.stderr, flush=True)
+
+def clave_cadena(bandera):
+    """Normaliza el nombre de bandera a la clave que usa la app (promos bancarias)."""
+    s = sin_tildes(bandera)
+    reglas = [(r"chango\s*mas|changomas|chango", "chango"), ("carrefour", "carrefour"), ("jumbo", "jumbo"), ("disco", "disco"),
+              ("coto", "coto"), ("anonima", "anonima"), ("cooperativa obrera", "coope"), ("vea", "vea"),
+              ("vital", "vital"), ("diarco", "diarco"), ("maxiconsumo", "maxiconsumo"), ("toledo", "toledo"),
+              ("libertad", "libertad"), ("josimar", "josimar"), ("nini", "nini")]
+    for patron, k in reglas:
+        if re.search(r"\b(?:" + patron + r")\b", s):
+            return k
+    if re.search(r"\bdia\b", s):
+        return "dia"
+    return re.sub(r"[^a-z0-9]+", "-", s).strip("-") or "otro"
+
+
+# ---------------------------------------------------------------- promos del súper
+def parsear_promo(leyenda):
+    """Convierte la leyenda libre de SEPA en algo que el motor sepa calcular por cantidad.
+    Devuelve dict o None (si no se entiende, la app usa el precio unitario promo tal cual)."""
+    if not leyenda:
+        return None
+    s = sin_tildes(leyenda)
+    m = re.search(r"\b(\d)\s*x\s*(\d)\b", s)                                  # 2x1, 3x2, 4x3
+    if m and int(m.group(1)) > int(m.group(2)) > 0:
+        return {"t": "nxm", "n": int(m.group(1)), "m": int(m.group(2))}
+    m = re.search(r"(\d{1,3})\s*%[^0-9]*(?:2d[oa]|segunda|2\s*unid)", s) or \
+        re.search(r"(?:2d[oa]|segunda|2\s*unid)[^0-9%]*(?:al\s*)?(\d{1,3})\s*%", s)
+    if m:
+        pct = int(m.group(1))
+        # "2da al 70%" = pagás 70% de la 2da; "70% off en la 2da" = pagás 30%. Distinguimos por "al".
+        paga = pct / 100 if re.search(r"al\s*" + m.group(1), s) else 1 - pct / 100
+        return {"t": "2da", "v": round(1 - paga, 3)}                          # v = descuento sobre la 2da
+    m = re.search(r"(\d{1,2})\s*%\s*(?:off|dto|desc|de descuento)?", s)
+    if m and 0 < int(m.group(1)) < 90:
+        min_q = re.search(r"llevando\s*(\d)", s)
+        d = {"t": "pct", "v": int(m.group(1)) / 100}
+        if min_q:
+            d["min"] = int(min_q.group(1))
+        return d
+    return None
+
+
+# ---------------------------------------------------------------- descarga
+def elegir_recurso(fecha):
+    log("Consultando el catálogo de datos abiertos…")
+    with urllib.request.urlopen(CKAN_URL, timeout=60) as r:
+        res = json.load(r)["result"]["resources"]
+    zips = [x for x in res if x.get("format", "").upper() == "ZIP" or x["url"].endswith(".zip")]
+    dia = DIAS[fecha.weekday()]
+    candidato = next((x for x in zips if sin_tildes(x["name"]) == dia), None)
+    if candidato and candidato["last_modified"][:10] == fecha.isoformat():
+        return candidato
+    ultimo = max(zips, key=lambda x: x["last_modified"])
+    log(f"⚠ Todavía no está publicado el archivo del {fecha} (suele salir ~16:20). "
+        f"Uso el más reciente: {ultimo['name']} {ultimo['last_modified'][:10]}.")
+    return ultimo
+
+def descargar(recurso, carpeta):
+    os.makedirs(carpeta, exist_ok=True)
+    fecha = recurso["last_modified"][:10]
+    destino = os.path.join(carpeta, f"sepa_{fecha}.zip")
+    esperado = recurso.get("size") or 0
+    if os.path.exists(destino) and (not esperado or os.path.getsize(destino) >= esperado * 0.98):
+        log(f"Ya descargado: {destino}")
+        return destino, fecha
+    log(f"Descargando {recurso['url']} ({esperado/1e6:.0f} MB)…")
+    tmp = destino + ".part"
+    with urllib.request.urlopen(recurso["url"], timeout=120) as r, open(tmp, "wb") as f:
+        bajado, t0 = 0, time.time()
+        while True:
+            b = r.read(1 << 20)
+            if not b:
+                break
+            f.write(b); bajado += len(b)
+            if esperado:
+                print(f"\r  {bajado/1e6:6.0f} / {esperado/1e6:.0f} MB  ({bajado/1e6/max(time.time()-t0,1):.1f} MB/s)",
+                      end="", file=sys.stderr)
+    print(file=sys.stderr)
+    os.replace(tmp, destino)
+    return destino, fecha
+
+
+# ---------------------------------------------------------------- lectura de CSV SEPA
+def leer_csv(zf, nombre):
+    """Lee un CSV de SEPA tolerando UTF-16, BOM, separador | o ; y la línea final de 'Última actualización'."""
+    with zf.open(nombre) as fb:
+        cabeza = fb.read(4)
+    enc = "utf-16" if cabeza[:2] in (b"\xff\xfe", b"\xfe\xff") else "utf-8-sig"
+    with zf.open(nombre) as fb:
+        txt = io.TextIOWrapper(fb, encoding=enc, errors="replace", newline="")
+        primera = txt.readline()
+        sep = "|" if primera.count("|") >= primera.count(";") else ";"
+        cols = [c.strip().strip('"').lower() for c in primera.replace("\0", "").rstrip("\r\n").split(sep)]
+        for fila in csv.reader((l.replace("\0", "") for l in txt), delimiter=sep):
+            if not fila or len(fila) < 3:
+                continue
+            if sin_tildes(fila[0]).strip().startswith("ultima actualizacion"):
+                continue
+            yield dict(zip(cols, (c.strip() for c in fila)))
+
+def iterar_comercios(path_zip):
+    """El ZIP del día trae un ZIP por comercio (a veces en subcarpetas). Devuelve ZipFile por comercio."""
+    externo = zipfile.ZipFile(path_zip)
+    nombres = externo.namelist()
+    internos = [n for n in nombres if n.lower().endswith(".zip")]
+    if internos:
+        for n in internos:
+            try:
+                yield n, zipfile.ZipFile(io.BytesIO(externo.read(n)))
+            except zipfile.BadZipFile:
+                log(f"  ✗ ZIP dañado, lo salteo: {n}")
+    else:  # ya descomprimido en carpetas dentro de un único zip
+        carpetas = sorted({os.path.dirname(n) for n in nombres if n.endswith("productos.csv")})
+        for c in carpetas:
+            yield c, _SubZip(externo, c)
+
+class _SubZip:
+    def __init__(self, zf, carpeta): self.zf, self.c = zf, carpeta
+    def namelist(self): return [n[len(self.c) + 1:] for n in self.zf.namelist() if n.startswith(self.c + "/")]
+    def open(self, n): return self.zf.open(f"{self.c}/{n}")
+
+def buscar(zf, base):
+    return next((n for n in zf.namelist() if os.path.basename(n).lower() == base), None)
+
+
+# ---------------------------------------------------------------- proceso principal
+def procesar(path_zip, fecha, args):
+    sucursales, productos, filas = {}, {}, []
+    cadenas = {}
+    n_com = 0
+    for nombre, zf in iterar_comercios(path_zip):
+        f_com, f_suc, f_prod = buscar(zf, "comercio.csv"), buscar(zf, "sucursales.csv"), buscar(zf, "productos.csv")
+        if not (f_com and f_suc and f_prod):
+            continue
+        n_com += 1
+        banderas = {}
+        for c in leer_csv(zf, f_com):
+            banderas[(c.get("id_comercio"), c.get("id_bandera"))] = c.get("comercio_bandera_nombre") or c.get("comercio_razon_social", "")
+        # sucursales dentro del radio / provincia
+        locales = {}
+        for s in leer_csv(zf, f_suc):
+            try:
+                lat, lng = float(s["sucursales_latitud"].replace(",", ".")), float(s["sucursales_longitud"].replace(",", "."))
+            except (KeyError, ValueError):
+                continue
+            if args.provincia and s.get("sucursales_provincia", "").upper() != args.provincia.upper():
+                continue
+            dist = km(args.lat, args.lng, lat, lng) if args.lat is not None else 0
+            if args.lat is not None and dist > args.radio:
+                continue
+            if args.solo_super and "super" not in sin_tildes(s.get("sucursales_tipo", "")) and \
+               "hiper" not in sin_tildes(s.get("sucursales_tipo", "")) and "autoservicio" not in sin_tildes(s.get("sucursales_tipo", "")):
+                continue
+            k = (s["id_comercio"], s["id_bandera"], s["id_sucursal"])
+            bandera = banderas.get((s["id_comercio"], s["id_bandera"]), "")
+            cad = clave_cadena(bandera)
+            cadenas.setdefault(cad, bandera.strip().title() if bandera.isupper() else bandera.strip())
+            locales[k] = {
+                "id": "-".join(k), "cad": cad, "bandera": bandera.strip(),
+                "nombre": s.get("sucursales_nombre", ""),
+                "dir": f"{s.get('sucursales_calle','').strip().title()} {s.get('sucursales_numero','').strip()}".strip(),
+                "localidad": s.get("sucursales_localidad", "").strip().title(),
+                "provincia": s.get("sucursales_provincia", ""),
+                "lat": round(lat, 6), "lng": round(lng, 6), "dist": round(dist, 2),
+            }
+        if not locales:
+            continue  # este comercio no tiene sucursales en la zona: no leemos sus productos
+        log(f"  {nombre}: {len(locales)} sucursales en la zona — leyendo precios…")
+        sucursales.update(locales)
+        for p in leer_csv(zf, f_prod):
+            k = (p.get("id_comercio"), p.get("id_bandera"), p.get("id_sucursal"))
+            if k not in locales:
+                continue
+            if p.get("productos_ean", "1").strip() != "1":   # 0 = código interno: no comparable entre cadenas
+                continue
+            ean = p.get("id_producto", "").strip().lstrip("0")
+            lista = num(p.get("productos_precio_lista"))
+            if not ean or not lista:
+                continue
+            if ean not in productos:
+                pres = f"{p.get('productos_cantidad_presentacion','').rstrip('0').rstrip('.')} {p.get('productos_unidad_medida_presentacion','')}".strip()
+                productos[ean] = {"ean": ean, "nombre": p.get("productos_descripcion", "").strip(),
+                                  "marca": p.get("productos_marca", "").strip(), "presentacion": pres}
+            promos = []
+            for i in ("1", "2"):
+                pu, ley = num(p.get(f"productos_precio_unitario_promo{i}")), p.get(f"productos_leyenda_promo{i}", "").strip()
+                if pu and pu < lista:
+                    promos.append({"precio": pu, "leyenda": ley, "spec": parsear_promo(ley)})
+            mejor = min(promos, key=lambda x: x["precio"]) if promos else None
+            filas.append(("-".join(k), ean, lista, mejor))
+    log(f"Comercios leídos: {n_com} · sucursales en zona: {len(sucursales)} · filas de precio: {len(filas):,}")
+    return cadenas, sucursales, productos, filas
+
+def elegir_productos(sucursales, filas, args):
+    """Para la app no mandamos todo: productos presentes en buena parte de las sucursales (los comparables)."""
+    presencia = Counter(ean for _, ean, _, _ in filas)
+    n = max(len(sucursales), 1)
+    forzados = set()
+    if args.catalogo and os.path.exists(args.catalogo):
+        forzados = {l.strip().lstrip("0") for l in open(args.catalogo, encoding="utf-8") if l.strip() and not l.startswith("#")}
+    elegidos = [e for e, c in presencia.most_common() if c / n >= args.cobertura][: args.max_productos]
+    return set(elegidos) | (forzados & set(presencia))
+
+def guardar_sqlite(path, fecha, cadenas, sucursales, productos, filas):
+    if os.path.dirname(path):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+    db = sqlite3.connect(path)
+    db.executescript("""
+    CREATE TABLE IF NOT EXISTS sucursal(id TEXT PRIMARY KEY, cadena TEXT, bandera TEXT, nombre TEXT, direccion TEXT,
+        localidad TEXT, provincia TEXT, lat REAL, lng REAL);
+    CREATE TABLE IF NOT EXISTS producto(ean TEXT PRIMARY KEY, nombre TEXT, marca TEXT, presentacion TEXT);
+    CREATE TABLE IF NOT EXISTS precio(fecha TEXT, sucursal_id TEXT, ean TEXT, precio_lista REAL, precio_promo REAL,
+        leyenda_promo TEXT, promo_spec TEXT, PRIMARY KEY(fecha, sucursal_id, ean));
+    CREATE INDEX IF NOT EXISTS ix_precio_ean ON precio(fecha, ean);
+    """)
+    db.executemany("INSERT OR REPLACE INTO sucursal VALUES (?,?,?,?,?,?,?,?,?)",
+                   [(s["id"], s["cad"], s["bandera"], s["nombre"], s["dir"], s["localidad"], s["provincia"], s["lat"], s["lng"])
+                    for s in sucursales.values()])
+    db.executemany("INSERT OR REPLACE INTO producto VALUES (?,?,?,?)",
+                   [(p["ean"], p["nombre"], p["marca"], p["presentacion"]) for p in productos.values()])
+    db.executemany("INSERT OR REPLACE INTO precio VALUES (?,?,?,?,?,?,?)",
+                   [(fecha, sid, ean, lista, m and m["precio"], m and m["leyenda"], m and json.dumps(m["spec"]))
+                    for sid, ean, lista, m in filas])
+    db.commit(); db.close()
+    log(f"SQLite actualizado: {path}")
+
+def main():
+    ap = argparse.ArgumentParser(description="Importa precios SEPA para Compra Inteligente")
+    ap.add_argument("--lat", type=float); ap.add_argument("--lng", type=float)
+    ap.add_argument("--radio", type=float, default=5, help="km alrededor de lat/lng (default 5)")
+    ap.add_argument("--provincia", help="código ISO, ej. AR-C (CABA), AR-B (Bs. As.), AR-X (Córdoba)")
+    ap.add_argument("--nombre", default="Mi zona", help="nombre de la zona para mostrar en la app")
+    ap.add_argument("--fecha", help="AAAA-MM-DD (default hoy)")
+    ap.add_argument("--zip", help="usar un ZIP SEPA ya descargado en vez de bajarlo")
+    ap.add_argument("--cache", default="sepa_cache", help="carpeta donde se guardan los ZIP")
+    ap.add_argument("--salida", default=".", help="carpeta del JSON de salida")
+    ap.add_argument("--cobertura", type=float, default=0.3, help="mínimo %% de sucursales donde aparece el producto (0-1)")
+    ap.add_argument("--max-productos", type=int, default=1500)
+    ap.add_argument("--catalogo", help="archivo con EANs (uno por línea) que siempre se incluyen")
+    ap.add_argument("--solo-super", action="store_true", help="excluir mayoristas/otros tipos de local")
+    ap.add_argument("--sqlite", help="además guardar todo (sin filtrar productos) en esta base SQLite")
+    args = ap.parse_args()
+
+    if (args.lat is None) != (args.lng is None):
+        ap.error("--lat y --lng van juntos")
+    if args.lat is None and not args.provincia:
+        ap.error("indicá --lat/--lng (con --radio) o --provincia")
+
+    fecha = date.fromisoformat(args.fecha) if args.fecha else date.today()
+    if args.zip:
+        path_zip, fecha_dato = args.zip, fecha.isoformat()
+    else:
+        path_zip, fecha_dato = descargar(elegir_recurso(fecha), args.cache)
+
+    t0 = time.time()
+    cadenas, sucursales, productos, filas = procesar(path_zip, fecha_dato, args)
+    if not sucursales:
+        log("No encontré sucursales con ese filtro. Revisá lat/lng (Argentina: lat negativa, lng negativa) o el radio.")
+        sys.exit(1)
+    if args.sqlite:
+        guardar_sqlite(args.sqlite, fecha_dato, cadenas, sucursales, productos, filas)
+
+    elegidos = elegir_productos(sucursales, filas, args)
+    sids = sorted(sucursales, key=lambda k: sucursales[k]["dist"])
+    s_idx = {"-".join(k): i for i, k in enumerate(sids)}
+    p_list = sorted(elegidos, key=lambda e: productos[e]["nombre"])
+    p_idx = {e: i for i, e in enumerate(p_list)}
+    precios = []
+    for sid, ean, lista, m in filas:
+        if ean in p_idx:
+            precios.append([s_idx[sid], p_idx[ean], lista,
+                            m and m["precio"], m and m["spec"], m and m["leyenda"] or None])
+    centro = {"lat": args.lat, "lng": args.lng} if args.lat is not None else {
+        "lat": sum(s["lat"] for s in sucursales.values()) / len(sucursales),
+        "lng": sum(s["lng"] for s in sucursales.values()) / len(sucursales)}
+    salida = {
+        "version": 1, "fuente": "SEPA - Precios Claros (datos.produccion.gob.ar), CC-BY 4.0",
+        "fecha": fecha_dato, "generado": datetime.now().isoformat(timespec="seconds"),
+        "zona": {"nombre": args.nombre, **centro, "radio_km": args.radio if args.lat is not None else None,
+                 "provincia": args.provincia},
+        "cadenas": [{"key": k, "nombre": v} for k, v in sorted(cadenas.items())],
+        "sucursales": [{k: v for k, v in sucursales[k].items()} for k in sids],
+        "productos": [productos[e] for e in p_list],
+        "precios": precios,
+    }
+    os.makedirs(args.salida, exist_ok=True)
+    out = os.path.join(args.salida, f"compra_inteligente_{fecha_dato}.json")
+    with open(out, "w", encoding="utf-8") as f:
+        json.dump(salida, f, ensure_ascii=False, separators=(",", ":"))
+    con_promo = sum(1 for p in precios if p[3])
+    log(f"✔ {out}  ({os.path.getsize(out)/1e6:.1f} MB) · {len(sids)} sucursales · {len(p_list)} productos · "
+        f"{len(precios):,} precios ({con_promo:,} con promo) · {time.time()-t0:.0f}s")
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,6 @@
+{
+  "name": "compra-inteligente",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node tests/motor.test.mjs" }
+}
