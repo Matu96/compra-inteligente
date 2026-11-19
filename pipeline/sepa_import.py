@@ -110,8 +110,11 @@ REGLAS_TIPO = [
     (r"\byerba\b", "Yerba mate"),
     (r"\bdulce de leche\b", "Dulce de leche"),
     (r"\bleche\b.*\ben polvo\b", "Leche en polvo"),
-    (r"\bleche\b.*\b(descremada|parcialmente descremada)\b", "Leche descremada"),
-    (r"\bleche\b.*\bentera\b", "Leche entera"),
+    # leche común: también abreviada ("ENT.3%", "DESC.", "1%"); no las chocolatadas, condensadas ni vegetales
+    (r"^(?!.*\b(chocolat\w*|cacao|condensad\w*|almendr\w*|coco|avena|soja|arroz|vegetal|cafe|polvo|dulce|nan|vital)\b)"
+     r".*\bleche\b.*(\b(descremada|descrem\w*|desc|parcialmente|parc|semidescremada)\b|\b[12] ?%)", "Leche descremada"),
+    (r"^(?!.*\b(chocolat\w*|cacao|condensad\w*|almendr\w*|coco|avena|soja|arroz|vegetal|cafe|polvo|dulce|nan|vital)\b)"
+     r".*\bleche\b.*(\b(entera|ent)\b|\b3 ?%)", "Leche entera"),
     (r"\byogur\w*\b.*\bbebible\b", "Yogur bebible"),
     (r"\byogur\w*\b", "Yogur"),
     (r"\bmanteca\b", "Manteca"),

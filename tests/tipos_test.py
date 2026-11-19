@@ -17,6 +17,10 @@ CASOS = [  # (descripción, marca, presentación informada, producto genérico e
     ("YERBA PLAYADITO SUAVE 1 KG", "PLAYADITO", "1 kg", "Yerba mate suave 1 kg"),
     ("YERBA MATE ROSAMONTE BARBACUA 1 KG", "ROSAMONTE", "1 kg", "Yerba mate barbacuá 1 kg"),
     ("YERBA MATE ORGANICA ROMANCE 500 G", "ROMANCE", "500 gr", "Yerba mate orgánica 500 g"),
+    ("LECHE FRESCA ENT.3% MULTIDEF. LA SERENISIMA SCH 1 LTR", "LA SERENISIMA", "1 ltr", "Leche entera 1 L"),
+    ("Leche Multidefensa 3% La Serenisima 1 Lt.", "LA SERENISIMA", "1 lt", "Leche entera 1 L"),
+    ("LECHE ULTRAPAS.DESCREMADA MULTIDEFENSA LS SCH 1 LTR", "LA SERENISIMA", "1 ltr", "Leche descremada 1 L"),
+    ("Leche Multidefensa 1% La Serenisima 1 Lt.", "LA SERENISIMA", "1 lt", "Leche descremada 1 L"),
     ("Leche Entera La Serenisima 1 Lt", "LA SERENISIMA", "1 lt", "Leche entera 1 L"),
     ("CAFE MOLIDO CARREFOUR BOLSA X 250 GRS", "CARREFOUR", "250 gr", "Café molido 250 g"),
     ("CAFE INST SUAVE MORE DP", "MORE", "170 gr", "Café instantáneo 170 g"),
@@ -29,6 +33,9 @@ CASOS = [  # (descripción, marca, presentación informada, producto genérico e
     ("Arroz Parboil CUISINE & CO 1Kg PAQ-1000-gr.", "CUISINE & CO", "1 gr", "Arroz parboil 1 kg"),
 ]
 NO_MEZCLAR = [  # no tienen que caer en estos genéricos
+    ("LECHE CHOCOLATADA ENTERA LA SERENISIMA 1 L", "LA SERENISIMA", "1 lt", "Leche entera"),
+    ("LECHE CONDENSADA ENTERA NESTLE 395 G", "NESTLE", "395 gr", "Leche entera"),
+    ("LECHE EN POLVO ENTERA LA SERENISIMA 800 G", "LA SERENISIMA", "800 gr", "Leche entera"),
     ("MERMELADA D/DURAZNO LIGHT CAROYENSE FRA", "CAROYENSE", "390 gr", "Duraznos en almíbar"),
     ("DURAZNO DESHID.E/MITADES FRUIT LIFE POT", "FRUIT LIFE", "250 gr", "Duraznos en almíbar"),
     ("JUGO DURAZNO EN POLVO", "TANG", "18 gr", "Duraznos en almíbar"),

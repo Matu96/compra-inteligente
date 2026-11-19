@@ -38,7 +38,7 @@ function guardar() {
 }
 
 let INDEX = null, PROMOS = { medios: [], promos: [] };
-let TIPOS = [], TIPO_NORM = [], TIPO_IDX = new Map(), PROD = [], PROD_NORM = [], POR_TIPO = [], POR_EAN = new Map();
+let TIPOS = [], TIPO_NORM = [], TIPO_IDX = new Map(), PROD = [], PROD_NORM = [], PROD_PAL = [], POR_TIPO = [], POR_EAN = new Map();
 const tiles = new Map();
 let stores = [];
 let ultimo = null;                      // último resultado (para la barra de la lista)
@@ -61,7 +61,7 @@ function marcasDe(ti) {
 const acepta = (marcas, pi) => !marcas.length || marcas.includes(PROD[pi][2] || 'Sin marca') || marcas.includes('#' + PROD[pi][0]);
 const marcaSel = m => m?.startsWith('#') ? marcaDe(m.slice(1)) : (m || '');
 // nombre corto de un producto puntual: la marca + lo que lo distingue ("Taragui Sin Palo"), sin el tipo ni la cantidad
-const RELLENO = new Set(['paq', 'paquete', 'x', 'de', 'la', 'el', 'en', 'con', 'bot', 'bsa', 'bolsa', 'lat', 'lata', 'est', 'cja', 'caja', 'pet', 'flex', 'kg', 'kgm', 'gr', 'grm', 'g', 'lt', 'ml', 'un', 'uni']);
+const RELLENO = new Set(['sch', 'sachet', 'ltr', 'lts', 'litro', 'ttb', 'botella', 'paq', 'paquete', 'x', 'de', 'la', 'el', 'en', 'con', 'bot', 'bsa', 'bolsa', 'lat', 'lata', 'est', 'cja', 'caja', 'pet', 'flex', 'kg', 'kgm', 'gr', 'grm', 'g', 'lt', 'ml', 'un', 'uni']);
 function textoSel(m) {
   if (!m.startsWith('#')) return titulo(m);
   const p = POR_EAN.get(m.slice(1)); if (!p) return '';
@@ -111,7 +111,7 @@ async function cargarBase() {
   const [idx, cat, promos] = await Promise.all([getJSON('data/index.json'), getJSON('data/catalogo.json'), getJSON('promos.json')]);
   INDEX = idx; PROMOS = promos;
   TIPOS = cat.tipos; TIPO_NORM = TIPOS.map(norm); TIPO_IDX = new Map(TIPOS.map((t, i) => [t, i]));
-  PROD = cat.productos; PROD_NORM = PROD.map(p => norm(`${p[1]} ${p[2]}`));
+  PROD = cat.productos; PROD_NORM = PROD.map(p => norm(`${p[1]} ${p[2]}`)); PROD_PAL = PROD_NORM.map(t => t.split(/[^a-z0-9ñ%]+/).filter(w => w.length >= 4));
   POR_TIPO = TIPOS.map(() => []); PROD.forEach((p, i) => POR_TIPO[p[4]].push(i));
   POR_EAN = new Map(PROD.map(p => [p[0], p]));
   const f = new Date(idx.fecha + 'T12:00:00');
@@ -200,7 +200,9 @@ function initControles() {
   const b = $('#buscar'), sg = $('#sugg');
   let act = 0, opts = [];
   const pintar = () => {
-    sg.innerHTML = opts.map((o, i) => `<div role="option" data-i="${i}" class="${i === act ? 'act' : ''}" aria-selected="${i === act}">${foto(eansFoto(o.ti, o.marca ? [o.marca] : []), '', o.marca || '', TIPOS[o.ti])}<span>${esc(TIPOS[o.ti])}${o.marca ? `, ${esc(titulo(o.marca))}` : ''}<small>${o.marca ? 'Solo esta marca' : `Cualquier marca, la más barata de ${marcasDe(o.ti).length}`}</small></span></div>`).join('');
+    sg.innerHTML = opts.map((o, i) => `<div role="option" data-i="${i}" class="${i === act ? 'act' : ''}" aria-selected="${i === act}">${o.ean
+      ? `${foto([o.ean], '', o.marca || '', TIPOS[o.ti])}<span>${esc(titulo(POR_EAN.get(o.ean)[1]))}<small>Este producto, en ${esc(TIPOS[o.ti])}</small></span>`
+      : `${foto(eansFoto(o.ti, o.marca ? [o.marca] : []), '', o.marca || '', TIPOS[o.ti])}<span>${esc(TIPOS[o.ti])}${o.marca ? `, ${esc(titulo(o.marca))}` : ''}<small>${o.marca ? 'Solo esta marca' : `Cualquier marca, la más barata de ${marcasDe(o.ti).length}`}</small></span>`}</div>`).join('');
     sg.style.display = opts.length ? 'block' : 'none';
     aplicarFotos(sg);
   };
@@ -212,19 +214,22 @@ function initControles() {
       const vistos = new Set();
       for (let i = 0; i < PROD.length && opts.length < 16; i++) {
         const p = PROD[i], clave = p[4] + '|' + p[2];
-        if (vistos.has(clave) || !toks.every(k => PROD_NORM[i].includes(k) || TIPO_NORM[p[4]].includes(k))) continue;
-        if (!toks.some(k => norm(p[2]).includes(k))) continue;
-        vistos.add(clave); opts.push({ ti: p[4], marca: p[2] || 'Sin marca' });
+        // el nombre oficial suele venir abreviado ("MULTIDEF.", "ENT."): "multidefensa" también encuentra "multidef"
+        const enNombre = k => PROD_NORM[i].includes(k) || (k.length >= 5 && PROD_PAL[i].some(w => k.startsWith(w)));
+        if (vistos.has(clave) || !toks.every(k => enNombre(k) || TIPO_NORM[p[4]].includes(k))) continue;
+        if (toks.some(k => norm(p[2]).includes(k))) { vistos.add(clave); opts.push({ ti: p[4], marca: p[2] || 'Sin marca' }); continue; }
+        // palabras que están en el nombre del producto y no en el genérico ("multidefensa", "sin palo"): ese producto
+        if (toks.some(k => !TIPO_NORM[p[4]].includes(k)) && !vistos.has(p[0])) { vistos.add(p[0]); opts.push({ ti: p[4], ean: p[0], marca: p[2] }); }
       }
     }
     act = 0; pintar();
   };
   const agregar = o => {
-    const tipo = TIPOS[o.ti], marcas = o.marca ? [o.marca] : [];
+    const tipo = TIPOS[o.ti], marcas = o.ean ? ['#' + o.ean] : o.marca ? [o.marca] : [];
     const ex = estado.lista.find(i => i.tipo === tipo && i.marcas.join() === marcas.join());
     if (ex) ex.qty++; else estado.lista.push({ tipo, marcas, qty: 1 });
     b.value = ''; opts = []; pintar(); renderTodo();
-    toast(`Agregaste ${tipo}`, 1800);
+    toast(`Agregaste ${o.ean ? titulo(POR_EAN.get(o.ean)[1]) : tipo}`, 1800);
   };
   b.onkeydown = e => {
     if (e.key === 'Enter' && opts[act]) { agregar(opts[act]); e.preventDefault(); }
