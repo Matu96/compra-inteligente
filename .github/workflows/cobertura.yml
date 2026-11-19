@@ -1,5 +1,8 @@
 name: Cobertura de fotos
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+    inputs:
+      buscar: { description: "EAN o palabras (separar con |)", required: false, default: "" }
 jobs:
   ver:
     runs-on: ubuntu-latest
@@ -9,4 +12,4 @@ jobs:
         run: |
           curl -sSf -o catalogo.json https://matu96.github.io/compra-inteligente/data/catalogo.json
           gh release download tiendas -p productos.json.gz
-          python pipeline/tiendas/cobertura.py catalogo.json productos.json.gz
+          if [ -n "${{ inputs.buscar }}" ]; then IFS='|' read -ra Q <<< "${{ inputs.buscar }}"; python pipeline/tiendas/buscar.py catalogo.json productos.json.gz "${Q[@]}"; else python pipeline/tiendas/cobertura.py catalogo.json productos.json.gz; fi
